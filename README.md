@@ -71,7 +71,7 @@
 2. 双击 `index.html`（Chrome / Edge / Safari / Firefox 均可）；
 3. 想打印随身卡片，点「更多 → 打印口袋卡」，或直接打印 `口袋卡.pdf`。
 
-手机使用：把 `index.html` 传到手机，用浏览器打开；也可以使用上面的 GitHub Pages 在线版。数据保存在各自浏览器的 localStorage 里，**不会跨设备同步**。
+手机使用：把 `index.html` 传到手机，用浏览器打开。数据保存在各自浏览器的 localStorage 里，**不会跨设备同步**。
 
 ### 本地开发
 
@@ -183,4 +183,4 @@ LICENSE             # MIT
 
 It is not a medical device and does not replace therapy. If you are in crisis, contact your local emergency number or a local helpline.
 
-Open `index.html` in any modern browser, or use the GitHub Pages build.
+Open `index.html` in any modern browser.
