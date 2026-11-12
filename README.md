@@ -1,10 +1,10 @@
 # 着陆台 · Landing Pad
 
-一个**本地、离线、无账号**的中文心理自助小工具。
+一个**本地、离线、无账号**的中文情绪危机自助小工具。
 
-被拒绝、断联，或关系突然断掉之后，脑子反复播放同一段、越想越紧的时候——先用 60 秒把身体拉回地面，再把「事实 / 解释 / 不可知 / 下一步」分开。
+情绪冲上来、脑子反复播放同一段、越想越紧的时候——先用 60 秒把身体拉回地面，再把「事实 / 解释 / 不可知 / 下一步」分开。
 
-它不负责让你想通，也不承诺任何人会回头。它只做两件事：
+它不负责让你想通，也不承诺事情会按你希望的方向发展。它只做两件事：
 
 1. **难受的当下**，给你一个不用思考就能按的按钮；
 2. **稍微缓过来之后**，给你几张纸面工具，把混在一起的东西分开。
@@ -30,7 +30,7 @@
 | 入口 | 解决的问题 | 怎么用 |
 |---|---|---|
 | **反刍** | 「我停不下来地想同一件事」 | 写下循环的那句话 → 选类型 → 得到一句针对性的回应 → 存进盒子，留到担忧窗口 |
-| **确定性** | 「我想确定对方到底怎么想」 | 四格：已确定的事实 / 我的解释 / 不可知 / 我的下一步 |
+| **确定性** | 「我想立刻得到一个确定答案」 | 四格：已确定的事实 / 我的解释 / 不可知 / 我的下一步 |
 | **今日** | 「我什么都做不了」 | 五件低标准的小事、最小的一步、5 分钟启动、睡前 3 行、7 天打卡 |
 | **更多** | 记录、卡片、求助 | 10 张心理教育卡、思维记录、支持网、危机资源、导出备份 |
 
@@ -42,7 +42,7 @@
 
 ### 确定性是什么意思
 
-你想确定的是「对方到底怎么想、以后会怎样」。这个确定性不存在，任何人给不了，包括对方本人——人的想法会变，未来的事没发生。
+你想确定的是「事情会怎样、别人怎么想、以后会不会好」。这个确定性不存在，任何人给不了——别人的想法会变，未来的事没发生，结果也不完全由你控制。
 
 这个工具不提供假答案，而是把「确定性」拆成三个能拿回来的东西：
 
@@ -52,13 +52,21 @@
 
 ---
 
+## 适用于什么
+
+- 情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；
+- **不绑定具体场景**：可能是关系、工作、学业、健康、家庭，也可能说不清原因；
+- 如果已经被诊断为焦虑障碍、适应障碍、抑郁或其他精神科问题，这个工具最多是日常辅助，治疗计划请跟医生 / 咨询师走。
+
+---
+
 ## 设计原则
 
 - **单文件**：`index.html` 里包含全部 HTML / CSS / JS，没有构建产物依赖，没有外部字体、图片、CDN。
 - **离线**：不发起任何网络请求，没有账号、没有埋点、没有统计。
 - **手机优先**：320px 起可用，底部导航，触控目标不小于 44px。
 - **难受时不需要做选择**：首页只保留一个主按钮，其余入口靠后。
-- **不承诺**：不说「一定会好起来」，不把一次拒绝解释成价值评分，也不假装能预知关系走向。
+- **不承诺**：不说「一定会好起来」，不把一次结果解释成价值评分，也不假装能预知未来。
 - **可退出**：任何时候关掉都不算失败；工具不是任务。
 
 ---
@@ -85,7 +93,7 @@ node build.mjs
 
 ### 自定义
 
-- **文案**：改 `src/body.html` 与 `src/app.js`；正文统一用「对方」，你可以替换成自己的称呼，也可以保留这种距离感。
+- **文案**：改 `src/body.html` 与 `src/app.js`；正文不绑定具体场景与人物，你可以按自己的处境替换措辞。
 - **配色 / 字体 / 圆角**：改 `src/style.css` 顶部的设计变量。
 - **担忧窗口默认时间**：改 `src/body.html` 里 `setting-window` 的 `value` 和 `src/app.js` 的默认设置。
 - **口袋卡**：改 `src/body.html` 末尾的 `#pocket` 区块，再用浏览器打印成 PDF。
@@ -113,7 +121,7 @@ node build.mjs
 - 行为激活（把「等有动力」换成「先做 5 分钟」）；
 - 思维记录（区分自动思维与证据）；
 - 反刍的具体化与「不可知区」练习；
-- 对反复求证的限制（不翻聊天记录、不反复问朋友、不盯着对方动态）。
+- 对反复求证的限制（不反复检查、不反复问人、不盯着相关动态）。
 
 这些方法对焦虑与反刍有实证支持，但**自助练习不等于治疗**。如果已经被诊断为焦虑障碍或适应障碍，这个工具最多是日常辅助，治疗计划请跟医生 / 咨询师走。
 
@@ -144,7 +152,7 @@ node build.mjs
 index.html          # 单文件成品，直接打开
 口袋卡.pdf           # 可打印的 A5 口袋卡
 preview.png         # 首页截图
-src/body.html       # 页面结构
+src/body.html       # 页面结构与全部文案
 src/style.css       # 样式与设计变量
 src/app.js          # 交互逻辑与 localStorage
 build.mjs           # 把 src 合成 index.html
@@ -179,7 +187,9 @@ LICENSE             # MIT
 
 ## English
 
-**Landing Pad** is a single-file, offline, account-free self-help tool for rumination and anxiety after rejection, estrangement, or a relationship ending. It runs entirely in the browser: one 60-second grounding exercise, a rumination interceptor, a four-box certainty exercise, behavioral activation, and printable pocket cards. No network requests, no analytics, no data leaves the device.
+**Landing Pad** is a single-file, offline, account-free Chinese self-help tool for emotional crises, rumination, and anxiety. It is not built around one specific scenario: it works for whatever is overwhelming you right now.
+
+It runs entirely in the browser: one 60-second grounding exercise, a rumination interceptor, a four-box certainty exercise, behavioral activation, and printable pocket cards. No network requests, no analytics, no data leaves the device.
 
 It is not a medical device and does not replace therapy. If you are in crisis, contact your local emergency number or a local helpline.
 
