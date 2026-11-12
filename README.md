@@ -10,7 +10,7 @@
 
 ## 使用
 
-**在线版（推荐，可装到主屏 / 桌面）**：<https://erphenheimer.github.io/zhuolu/>
+**在线版（PWA，可装到主屏 / 桌面）**：把仓库根目录部署到任意 HTTPS 静态托管（Cloudflare Pages、Netlify、Vercel 等），打开网址后按提示安装。仓库根目录已包含 PWA 需要的 `manifest.webmanifest`、`sw.js` 和 `icons/`。
 
 - iPhone / iPad：用 Safari 打开 → 点「分享」→「添加到主屏幕」
 - Android：用 Chrome 打开 → 右上角菜单 →「安装应用」/「添加到主屏幕」
@@ -63,4 +63,4 @@ node build.mjs   # 把 src/ 合成单文件 index.html
 
 ---
 
-**English**: Landing Pad is a single-file, offline, account-free Chinese self-help tool for emotional crises, rumination and anxiety. It is also an installable PWA (iOS/Android/desktop) served from GitHub Pages. No network requests, no analytics, data stays in your browser. Not a medical device; does not replace professional care.
+**English**: Landing Pad is a single-file, offline, account-free Chinese self-help tool for emotional crises, rumination and anxiety. It can also be deployed as an installable PWA (iOS/Android/desktop) on any HTTPS static host. No network requests, no analytics, data stays in your browser. Not a medical device; does not replace professional care.
