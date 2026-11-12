@@ -1,0 +1,661 @@
+<a class="skip" href="#main">跳到内容</a>
+
+<aside class="rail" aria-label="侧边栏">
+  <div class="rail__brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div><b>着陆台</b><span>LANDING PAD</span></div>
+  </div>
+  <nav class="rail__nav" aria-label="主导航">
+    <a class="nav-item" href="#/now" data-route="now"><span class="nav-k">01</span><span>现在<span class="nav-d">难受的时候从这里开始</span></span></a>
+    <a class="nav-item" href="#/rumination" data-route="rumination"><span class="nav-k">02</span><span>反刍<span class="nav-d">登记、推迟、打断</span></span></a>
+    <a class="nav-item" href="#/certainty" data-route="certainty"><span class="nav-k">03</span><span>确定性<span class="nav-d">事实 / 解释 / 不可知</span></span></a>
+    <a class="nav-item" href="#/today" data-route="today"><span class="nav-k">04</span><span>今日<span class="nav-d">做到一件就成立</span></span></a>
+  </nav>
+  <div class="rail__foot">
+    <button class="btn btn--primary btn--sm" data-action="open-sos">我现在很难受</button>
+    <a class="rail__link" href="#/more">记录 · 卡库 · 设置</a>
+    <p class="rail__note">所有内容只保存在这台设备的浏览器里，不上传。</p>
+  </div>
+</aside>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="mobile-brand"><span class="brand-mark" aria-hidden="true"></span><b>着陆台</b></div>
+    <div class="topbar__brand"><b>着陆台</b><span id="topbar-date"></span></div>
+    <div class="topbar__spacer"></div>
+    <button class="btn btn--ghost btn--sm" data-action="open-sos">应急着陆</button>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- ============ 现在 ============ -->
+    <section class="view is-active" data-view="now">
+      <div class="hero">
+        <p class="eyebrow" id="greet">现在</p>
+        <h1 class="hero__title">今天，<br>不用把任何事<em>想清楚</em>。</h1>
+        <p class="hero__lede">如果刚被拒绝、关系突然断了，或正在反复想同一件事——先让身体回到地面。想明白这件事，不差这一小时。</p>
+      </div>
+
+      <button class="sos" data-action="open-sos" aria-label="开始 60 秒着陆">
+        <span class="sos__ring" aria-hidden="true"></span>
+        <span class="sos__label">我现在很难受</span>
+        <span class="sos__sub">60 秒着陆 · 不解决任何事</span>
+        <span class="sos__arrow" aria-hidden="true">→</span>
+      </button>
+
+      <div class="quick">
+        <button class="quick__item" data-action="go" data-route="rumination">
+          <span class="quick__k">01</span>
+          <span class="quick__t">我停不下来地反刍</span>
+          <span class="quick__d">把循环拿出来，只登记，不展开</span>
+        </button>
+        <button class="quick__item" data-action="go" data-route="certainty">
+          <span class="quick__k">02</span>
+          <span class="quick__t">我想确定对方到底怎么想</span>
+          <span class="quick__d">分成：事实、解释、不可知、下一步</span>
+        </button>
+      </div>
+
+      <div class="card card--quiet">
+        <div class="card-head"><h2 class="h3">确定性的三个来源</h2><span class="badge">先看这个</span></div>
+        <ol class="truths">
+          <li><b>你的反应有机制。</b>被拒绝后的疼、反复想、睡不着，是应激反应和反刍循环，不是你太脆弱。</li>
+          <li><b>对方的想法和未来不可知。</b>再想一百遍也不会变成信息。反复猜只会制造假的确定感。</li>
+          <li><b>下一步可以 100% 确定。</b>比如现在喝一口水、洗把脸、把手机屏幕朝下。</li>
+        </ol>
+        <a class="link" href="#/certainty">做一次四格整理 →</a>
+      </div>
+
+      <div class="one-thing">
+        <div>
+          <p class="eyebrow">现在只做一件</p>
+          <p class="one-thing__text" id="one-thing">把手机翻过去，屏幕朝下。</p>
+        </div>
+        <button class="btn btn--ghost btn--sm" data-action="shuffle-thing">换一件</button>
+      </div>
+
+      <div class="mini-stats" id="home-stats"></div>
+      <div class="mini-stats" id="home-window" hidden></div>
+    </section>
+
+    <!-- ============ 反刍 ============ -->
+    <section class="view" data-view="rumination">
+      <header class="view-head">
+        <p class="eyebrow">反刍拦截</p>
+        <h1 class="h1">把循环从脑子里<br>拿出来。</h1>
+        <p class="lede">反刍不是思考：它没有终点，也不产生新信息。这里只做三件事——登记、推迟、打断。</p>
+      </header>
+
+      <div class="actions-row">
+        <button class="btn btn--primary" data-action="start-intercept">开始一次拦截</button>
+        <button class="btn btn--ghost" data-action="open-sos">先做 60 秒着陆</button>
+      </div>
+
+      <div class="card window-card">
+        <div class="card-head">
+          <h2 class="h3">担忧窗口</h2>
+          <button class="link-btn" data-action="toggle-window-edit">修改时间</button>
+        </div>
+        <div class="window-time"><span id="window-time">19:30</span><small>每天一次</small></div>
+        <p class="window-status" id="window-status"></p>
+        <div class="window-edit" id="window-edit" hidden>
+          <label class="small" for="window-time-input">每天几点处理积压的念头？</label>
+          <div class="window-edit__row">
+            <input type="time" id="window-time-input" value="19:30">
+            <button class="btn btn--primary btn--sm" data-action="save-window">保存</button>
+          </div>
+        </div>
+        <div class="window-timer" id="window-timer" hidden>
+          <div class="window-timer__label"><span>窗口剩余</span><span class="mono" id="window-countdown">15:00</span></div>
+          <div class="window-timer__bar"><span id="window-bar"></span></div>
+        </div>
+        <div class="window-actions">
+          <button class="btn btn--primary btn--sm" data-action="open-window" id="window-open-btn">现在开窗 15 分钟</button>
+          <button class="btn btn--ghost btn--sm" data-action="park-thought">先存一个念头</button>
+          <button class="btn btn--ghost btn--sm" data-action="close-window" id="window-close-btn" hidden>关窗</button>
+        </div>
+        <ul class="list" id="parked-list" hidden></ul>
+        <p class="small muted mt-12" id="parked-hint"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">反刍日志</h2><span class="badge" id="rum-count">今天 0 次</span></div>
+        <p class="small muted">这里只记录它来过。出现次数多，不代表它更真。</p>
+        <ul class="list mt-8" id="rum-list"></ul>
+      </div>
+
+      <p class="note">今天的目标不是“想通”，而是“少想一轮”。少一轮也算数。</p>
+    </section>
+
+    <!-- ============ 确定性 ============ -->
+    <section class="view" data-view="certainty">
+      <header class="view-head">
+        <p class="eyebrow">确定性</p>
+        <h1 class="h1">关于确定性，<br>三句实话。</h1>
+        <p class="lede">你想确定对方怎么想、还有没有机会。这部分没有答案。但“确定性”本身，可以从别的地方拿回来。</p>
+      </header>
+
+      <ol class="claims">
+        <li>
+          <span class="num">01</span>
+          <div><b>你能确定的，是你的反应有名字。</b><p>被拒绝会疼，通常不只是“没戏了”，还包括社会性的痛、对自我价值的威胁、以及对“以后不会再发生”的失控感。这是常见反应，不是你有问题。</p><span class="tag">有机制 · 可解释</span></div>
+        </li>
+        <li>
+          <span class="num">02</span>
+          <div><b>你不能确定的，是另一个人的内心。</b><p>对方为什么拒绝、真实的想法、你们以后还有没有可能——这些都在“不可知区”。你可以猜，但猜不会把它变成信息。反复求证只会短暂缓解，然后让下一次更难忍。</p><span class="tag">不可知 · 不求解</span></div>
+        </li>
+        <li>
+          <span class="num">03</span>
+          <div><b>你能 100% 确定的，是下一个动作。</b><p>不是“以后会不会好”，而是“接下来十分钟我做什么”。把注意力从不可知区搬到可控区，焦虑才会降下来。</p><span class="tag">可控 · 可执行</span></div>
+        </li>
+      </ol>
+
+      <div class="card mt-24">
+        <div class="card-head"><h2 class="h3">四格整理</h2><span class="badge">约 5 分钟</span></div>
+        <p class="small muted mb-16">把脑子里混在一起的东西分开。分开本身就会让强度降一点。写不完整也没关系。</p>
+        <div class="matrix">
+          <div class="matrix__cell matrix__cell--fact">
+            <div class="cell-head"><span class="cell-k">1</span><h3>已确定的事实</h3></div>
+            <p class="cell-hint">亲眼看到、亲耳听到、有记录。只写这些。</p>
+            <textarea id="cert-fact" placeholder="例：对方明确说了“我们还是做朋友”。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--interp">
+            <div class="cell-head"><span class="cell-k">2</span><h3>我的解释</h3></div>
+            <p class="cell-hint">推断、猜测、脑内旁白。写下来就会显形。</p>
+            <textarea id="cert-interp" placeholder="例：对方一定觉得我这个人很没意思。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--unknown">
+            <div class="cell-head"><span class="cell-k">3</span><h3>不可知 / 不求解</h3></div>
+            <p class="cell-hint">对方的真实想法、未来、没发生的事。</p>
+            <textarea id="cert-unknown" placeholder="例：对方以后会不会后悔；对方现在到底怎么看我。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--next">
+            <div class="cell-head"><span class="cell-k">4</span><h3>我的下一步</h3></div>
+            <p class="cell-hint">10 分钟内能做完的具体动作。</p>
+            <textarea id="cert-next" placeholder="例：把手机放客厅，去洗个脸。"></textarea>
+          </div>
+        </div>
+        <div class="actions-row mb-0">
+          <button class="btn btn--primary" data-action="save-cert">存下这一页</button>
+          <button class="btn btn--ghost" data-action="clear-cert">清空输入</button>
+        </div>
+        <p class="note mt-16">焦虑最常做的事，是把 ②（我的解释）当成 ①（事实）。写完先别改，看一眼两边的比例。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">已存下的整理</h2><span class="badge" id="cert-count">0 份</span></div>
+        <ul class="list cert-list" id="cert-list"></ul>
+      </div>
+    </section>
+
+    <!-- ============ 今日 ============ -->
+    <section class="view" data-view="today">
+      <header class="view-head">
+        <p class="eyebrow">今日</p>
+        <h1 class="h1">今天只需要<br>成立一次。</h1>
+        <p class="lede">适应期不需要高效，只需要不断线。下面的标准故意定得很低。</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">今日三件套</h2><span class="badge" id="today-progress">0 / 5</span></div>
+        <div class="check-list" id="today-checks">
+          <button class="check-row" data-check="sleep" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>睡了一会儿</b><small>哪怕分段、哪怕只有几小时</small></span>
+          </button>
+          <button class="check-row" data-check="eat" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>吃了点东西</b><small>不用是一顿饭，有热量就行</small></span>
+          </button>
+          <button class="check-row" data-check="move" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>动了 10 分钟</b><small>走到楼下再回来也算</small></span>
+          </button>
+          <button class="check-row" data-check="connect" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>和一个真人说了话</b><small>舍友、同学、店员都算</small></span>
+          </button>
+          <button class="check-row" data-check="push" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>完成一件 10 分钟内的小事</b><small>洗衣服、回一条消息、交一份作业</small></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">最小的一步</h2><button class="link-btn" data-action="shuffle-step">换一个</button></div>
+        <div class="chips" id="step-chips">
+          <button class="chip is-on" data-step-cat="身体">身体</button>
+          <button class="chip" data-step-cat="连接">连接</button>
+          <button class="chip" data-step-cat="推进">推进</button>
+          <button class="chip" data-step-cat="离开屏幕">离开屏幕</button>
+        </div>
+        <p class="one-thing__text mt-16" id="step-text">站起来，接一杯水，慢慢喝完。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">5 分钟启动</h2><span class="badge">先做，不等想做</span></div>
+        <p class="small muted">选一件拖着的小事，只做 5 分钟。时间到了可以停。</p>
+        <div class="timer-line mt-16">
+          <span class="timer-big" id="today-timer">05:00</span>
+          <span class="timer-bar"><span id="today-bar"></span></span>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary btn--sm" data-action="timer-start">开始</button>
+          <button class="btn btn--ghost btn--sm" data-action="timer-reset">归零</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">睡前 3 行</h2><span class="badge">给今天收尾</span></div>
+        <p class="small muted mb-16">写下来是为了让大脑知道：今天结束了。不需要总结人生。躺下 20 分钟还睡不着，就起来做点无聊的事，困了再回床上。</p>
+        <div class="sleep-grid">
+          <div class="field"><label for="sleep-fact">今天发生了什么（事实）</label><textarea id="sleep-fact" placeholder="只写事实，不写评价"></textarea></div>
+          <div class="field"><label for="sleep-did">我今天做到了什么</label><textarea id="sleep-did" placeholder="再小也算"></textarea></div>
+          <div class="field"><label for="sleep-tomorrow">明天最小的一件</label><textarea id="sleep-tomorrow" placeholder="一件，10 分钟内"></textarea></div>
+        </div>
+        <div class="actions-row mb-0">
+          <button class="btn btn--primary btn--sm" data-action="save-sleep">收工</button>
+          <span class="small muted" id="sleep-last"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">最近 7 天</h2><span class="badge">每天做到几件</span></div>
+        <div class="week" id="week"></div>
+      </div>
+    </section>
+
+    <!-- ============ 更多 ============ -->
+    <section class="view" data-view="more">
+      <header class="view-head">
+        <p class="eyebrow">更多</p>
+        <h1 class="h1">记录、卡片<br>和一些设置。</h1>
+        <p class="lede">这里的东西不需要一次看完。焦虑的时候，只读一页就够。</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">我的记录</h2><span class="badge">只在本机</span></div>
+        <div class="tabs" role="tablist" aria-label="记录类型">
+          <button class="tab is-on" data-rec-tab="rum" role="tab" aria-selected="true">反刍</button>
+          <button class="tab" data-rec-tab="cert" role="tab" aria-selected="false">确定性</button>
+          <button class="tab" data-rec-tab="tr" role="tab" aria-selected="false">思维记录</button>
+          <button class="tab" data-rec-tab="sleep" role="tab" aria-selected="false">睡前</button>
+          <button class="tab" data-rec-tab="sos" role="tab" aria-selected="false">着陆</button>
+        </div>
+        <div class="tab-panel is-on" data-rec-panel="rum"><ul class="list" id="rec-rum"></ul></div>
+        <div class="tab-panel" data-rec-panel="cert"><ul class="list" id="rec-cert"></ul></div>
+        <div class="tab-panel" data-rec-panel="tr"><ul class="list" id="rec-tr"></ul></div>
+        <div class="tab-panel" data-rec-panel="sleep"><ul class="list" id="rec-sleep"></ul></div>
+        <div class="tab-panel" data-rec-panel="sos"><ul class="list" id="rec-sos"></ul></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">思维记录</h2><span class="badge">CBT · 慢一点做</span></div>
+        <p class="small muted mb-16">当一句话反复出现、你又很确定它是真的，用它。把“想法”和“证据”分开。</p>
+        <div class="field"><label for="tr-situation">1 · 情境</label><textarea id="tr-situation" placeholder="什么时候、在哪里、发生了什么（只写事实）"></textarea></div>
+        <div class="field"><label for="tr-thought">2 · 自动思维</label><textarea id="tr-thought" placeholder="脑子里冒出的那句话"></textarea></div>
+        <div class="field"><label for="tr-belief">3 · 你当时有多相信它？</label>
+          <input class="range" type="range" id="tr-belief" min="0" max="100" value="80" step="5" aria-label="相信程度">
+          <div class="range-scale"><span>0 完全不信</span><span id="tr-belief-num">80%</span><span>100 完全相信</span></div>
+        </div>
+        <div class="support-row">
+          <div class="field"><label for="tr-emotion">4 · 情绪</label><input type="text" id="tr-emotion" placeholder="例：羞耻、慌"></div>
+          <div class="field"><label for="tr-intensity">强度 0–100</label><input class="range" type="range" id="tr-intensity" min="0" max="100" value="70" step="5" aria-label="情绪强度"><div class="range-scale"><span>0</span><span id="tr-intensity-num">70</span><span>100</span></div></div>
+        </div>
+        <div class="field"><label for="tr-for">5 · 支持它的证据（只写事实）</label><textarea id="tr-for"></textarea></div>
+        <div class="field"><label for="tr-against">6 · 反对它的证据（再小也写）</label><textarea id="tr-against"></textarea></div>
+        <div class="field"><label for="tr-balanced">7 · 更平衡的一句话</label><textarea id="tr-balanced" placeholder="不是安慰，是把两边都算进去的说法"></textarea></div>
+        <div class="field"><label for="tr-after">8 · 现在强度 0–100</label><input class="range" type="range" id="tr-after" min="0" max="100" value="60" step="5" aria-label="之后强度"><div class="range-scale"><span>0</span><span id="tr-after-num">60</span><span>100</span></div></div>
+        <div class="actions-row mb-0"><button class="btn btn--primary" data-action="save-tr">存下这条</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">读懂这一刻</h2><span class="badge">10 张卡</span></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">01</span>被拒绝为什么这么疼<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>被拒绝激活的不只是“没戏了”，还包括社会性的痛（被排除会带来真实的痛感）、自我价值的威胁（“是不是我不够好”）、以及失控感（“我的努力没有用”）。三样叠在一起，疼得超出预期是正常的。</p><p>它更像一次急性应激反应，而不是一次“客观评分”。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">02</span>反刍不是思考<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>反刍是重复、被动、聚焦在“为什么”和“我哪里不好”上的思维；解决问题是具体的、有步骤、有终点的。反刍让你感觉在努力，但它不产出任何可执行的东西。</p><p>一个检查方法：想完之后，我多了一条能做的事吗？没有，那就是反刍。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">03</span>为什么“求确定”越求越焦虑<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>每一次求证（反复看聊天记录、问朋友“对方到底什么意思”、猜对方的动态），都会短暂降低焦虑，然后让下一次更想求证。短期有效，长期把不确定性训练得更可怕。</p><p>更稳的做法不是“想出一个确定答案”，而是练习在不确定里待着，同时把生活往前推一点。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">04</span>适应障碍是什么<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>适应障碍指在明确的压力事件之后（通常在 3 个月内），出现明显的情绪或行为反应，比如焦虑、低落、失眠、注意力下降、回避，并且影响到日常功能。它不是你“性格不行”，而是应激系统还没缓过来。</p><p>如果这是医生给你的诊断，这个工作台只做日常辅助，治疗计划请跟医生或咨询师走。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">05</span>焦虑发作时，身体在做什么<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>心跳加快、呼吸变浅、手抖、出汗、胃里翻、脑子空白——这些是交感神经在把身体调成“应对危险”的状态。它很难受，但本身通常不会伤害你。</p><p>延长呼气、把注意力放到脚底和手心的触感，能让这套反应慢慢退下去。如果出现胸痛、晕厥、持续心悸，仍然要先看医生排除身体问题。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">06</span>恢复不是直线<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>好几天、突然又崩一晚、再好几天——这是恢复的常态，不是倒退，也不是“之前的努力白费了”。</p><p>看趋势，不看单日。一周里着陆次数变少、强度峰值变低，就是进展。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">07</span>想联系对方的时候<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>先把想说的话写下来，不发送。等 24 小时再看一遍。区分两件事：我是想对方，还是想用对方的回应来缓解现在的焦虑？后者通常撑不过一晚。</p><p>如果 24 小时后还想发，再发也不迟。通常不会因为迟一天就失去什么，但深夜发出去的话往往收不回来。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">08</span>现在先别做的五件事<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>一，反复翻聊天记录找线索；二，反复看对方的动态；三，找不同的人一遍遍求证；四，深夜喝酒后做决定；五，用“马上开始一段新关系”来证明自己没事。</p><p>它们都能短暂止痛，但都会把反刍喂大。</p></div>
+        </details></div>
+        
+        <div class="acc"><details>
+          <summary><span class="acc-k">09</span>什么时候该找专业帮助<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>持续两周以上情绪低落或焦虑、睡眠明显受损、无法学习工作、回避越来越多，或者出现伤害自己的念头——请不要自己扛。心理科/精神科门诊、学校心理中心、心理咨询都可以。</p><p>认知行为取向（CBT，尤其是反刍聚焦 CBT）对反刍有实证支持；暴露与反应阻止常用于焦虑与强迫。是否需要药物，请由精神科医生评估。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">10</span>关于“确定性”的一句实话<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>你想要的确定性是“对方到底怎么想、以后会怎样”。这个确定性不存在，任何人给不了，包括对方本人——人的想法会变，未来的事没发生。</p><p>能确定的是：你现在很难受，这是有原因的；你可以做一个小动作；以及，这一刻不需要有答案。</p></div>
+        </details></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">支持网</h2><span class="badge">提前写好，难受时不用想</span></div>
+        <p class="small muted mb-16">写两个可以联系的人。真到难受的时候，不用组织语言，直接发下面那句。</p>
+        <div class="support-row">
+          <div class="field"><label for="support-name-1">可以联系的人 1</label><input type="text" id="support-name-1" placeholder="名字"></div>
+          <div class="field"><label for="support-name-2">可以联系的人 2</label><input type="text" id="support-name-2" placeholder="名字"></div>
+        </div>
+        <div class="script-box">可以只说一句：<b>“我现在有点难受，不用给建议，能陪我聊十分钟吗？”</b></div>
+        <div class="actions-row mb-0"><button class="btn btn--ghost btn--sm" data-action="save-support">保存</button><span class="small muted" id="support-saved"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">如果现在很危险</h2><span class="badge badge--clay">不用犹豫</span></div>
+        <div class="crisis-lines">
+          <div class="crisis-line"><b>12356</b><span>全国心理援助热线 · 各地接听</span></div>
+          <div class="crisis-line"><b>010-82951332</b><span>北京市心理援助热线 · 24 小时</span></div>
+          <div class="crisis-line"><b>120 / 110</b><span>有立即危险时</span></div>
+        </div>
+        <p class="small muted mt-12">如果身边有人，直接告诉对方：“我现在状态不好，能不能陪我一会儿。”这句话比解释有效。</p>
+        <p class="small muted mt-12">不在中国大陆？拨打当地紧急电话，或在 <a href="https://findahelpline.com" target="_blank" rel="noopener">findahelpline.com</a> 查找本地心理援助热线。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">数据与设置</h2></div>
+        <div class="data-actions">
+          <button class="btn btn--ghost btn--sm" data-action="export-json">导出 JSON</button>
+          <button class="btn btn--ghost btn--sm" data-action="export-md">导出 Markdown</button>
+          <button class="btn btn--ghost btn--sm" data-action="import-json">导入 JSON</button>
+          <button class="btn btn--ghost btn--sm" data-action="print-pocket">打印口袋卡</button>
+          <button class="btn btn--danger btn--sm" data-action="clear-all">清空所有数据</button>
+        </div>
+        <div class="divider"></div>
+        <div class="support-row">
+          <div class="field"><label for="setting-window">担忧窗口时间</label><input type="time" id="setting-window" value="19:30"></div>
+          <div class="field"><label for="setting-theme">主题</label>
+            <select id="setting-theme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+          </div>
+        </div>
+        <div class="field mb-0"><label for="setting-motion">动效</label>
+          <select id="setting-motion"><option value="auto">跟随系统</option><option value="reduce">减少动效</option></select>
+        </div>
+      </div>
+
+      <div class="card card--quiet">
+        <div class="card-head"><h2 class="h3">关于这个工具</h2></div>
+        <p class="small">着陆台是一个自助练习工具，不是医疗设备，也不替代心理咨询或精神科诊疗。里面的方法是认知行为取向（CBT）与接纳承诺取向（ACT）里常见的自助技术：情绪命名、延长呼气、5-4-3-2-1 接地、担忧推迟、行为激活、思维记录。</p>
+        <p class="small mt-12">适用场景：表白被拒、分手或断联、被重要的人拒绝或排除之后的反刍与焦虑；其中大部分练习也适用于一般的反刍和焦虑。它不是只给恋爱用的。</p>
+        <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。清除浏览器数据会一起清掉，重要内容建议导出备份。</p>
+        <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
+        <p class="small muted mt-12">开源版本 v1.0.0 · MIT 许可 · 2026-11</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-foot">
+    <span>着陆台 · 本地工作台 · 数据只在这台设备</span>
+    <span>不是医疗工具 · 开源 MIT · <a href="#/more">求助与热线</a> · 12356</span>
+  </footer>
+</div>
+
+<nav class="bottom-nav" aria-label="底部导航">
+  <div class="bottom-nav__inner">
+    <a class="bnav-item" href="#/now" data-route="now" aria-label="现在">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"></circle></svg><span>现在</span>
+    </a>
+    <a class="bnav-item" href="#/rumination" data-route="rumination" aria-label="反刍">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9a7 7 0 0 1 12-2.5"></path><path d="M17 3v4h-4"></path><path d="M19 15a7 7 0 0 1-12 2.5"></path><path d="M7 21v-4h4"></path></svg><span>反刍</span>
+    </a>
+    <a class="bnav-item" href="#/certainty" data-route="certainty" aria-label="确定性">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M12 4v16M4 12h16"></path></svg><span>确定性</span>
+    </a>
+    <a class="bnav-item" href="#/today" data-route="today" aria-label="今日">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path></svg><span>今日</span>
+    </a>
+    <a class="bnav-item" href="#/more" data-route="more" aria-label="更多">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"></path></svg><span>更多</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ============ 着陆浮层 ============ -->
+<div class="overlay" id="sos-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="sos-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="sos-kicker">着陆 · 1 / 4</span>
+        <div class="steps-dots" id="sos-dots" aria-hidden="true"><i class="is-on"></i><i></i><i></i><i></i></div>
+      </div>
+      <button class="panel__close" data-action="close-sos" aria-label="关闭着陆">×</button>
+    </div>
+    <div class="panel__body">
+
+      <section class="step is-on" data-sos-step="1">
+        <h2 class="h2" id="sos-title">先停一下。</h2>
+        <p class="lede">接下来的 60 秒，你不需要想明白任何事，也不需要做任何决定。只跟着做。</p>
+        <div class="intensity-wrap mt-24">
+          <div class="intensity-num" id="sos-before-num">7</div>
+          <div class="intensity-side">
+            <label class="small" for="sos-before">现在的不舒服，大概几分？</label>
+            <input class="range" type="range" id="sos-before" min="0" max="10" value="7" step="1" aria-label="开始前强度">
+            <div class="intensity-scale"><span>0 还好</span><span>10 快撑不住</span></div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-start">开始 60 秒</button>
+          <button class="btn btn--ghost" data-action="sos-skip-breath">跳过，直接接地</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="2">
+        <p class="panel__kicker">呼吸 · 5 轮</p>
+        <h2 class="h2">跟着圆，吸气，呼气。</h2>
+        <div class="breathe">
+          <div class="breathe__stage is-idle" id="breathe-stage">
+            <span class="breathe__halo" aria-hidden="true"></span>
+            <span class="breathe__halo breathe__halo--2" aria-hidden="true"></span>
+            <span class="breathe__circle" aria-hidden="true"></span>
+            <span class="breathe__phase" id="breathe-phase" aria-live="polite">准备</span>
+          </div>
+          <div class="breathe__count" id="breathe-count">第 0 / 5 轮</div>
+          <div class="breathe__bar" aria-hidden="true"><span id="breathe-bar"></span></div>
+          <div class="breathe__hint">吸气 4 秒 · 停 2 秒 · 呼气 6 秒<br>如果头晕，恢复正常呼吸，直接点“跳过”。</div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--ghost" data-action="sos-skip-breath">跳过</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="3">
+        <p class="panel__kicker">接地 · 5-4-3-2-1</p>
+        <h2 class="h2">用身体，把注意力拿回来。</h2>
+        <p class="small muted">每找到一样点一下。找不到那么多也没关系，点到几算几。</p>
+        <div class="ground-list" id="ground-list">
+          <button class="ground-row" data-sense="see" data-total="5">
+            <span class="ground-row__sense">看</span>
+            <span class="ground-row__t"><b>5 样你能看见的东西</b><small>灯、杯子、窗外的树</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="touch" data-total="4">
+            <span class="ground-row__sense">摸</span>
+            <span class="ground-row__t"><b>4 样你能摸到的东西</b><small>桌面、衣角、椅背</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="hear" data-total="3">
+            <span class="ground-row__sense">听</span>
+            <span class="ground-row__t"><b>3 种你能听见的声音</b><small>空调、脚步、远处的车</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="smell" data-total="2">
+            <span class="ground-row__sense">闻</span>
+            <span class="ground-row__t"><b>2 种气味</b><small>空气、洗衣液、饭味</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="taste" data-total="1">
+            <span class="ground-row__sense">尝</span>
+            <span class="ground-row__t"><b>1 种味道</b><small>嘴里的、喝一口水</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i></span>
+          </button>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-next">下一步</button>
+          <button class="btn btn--ghost" data-action="sos-skip-ground">跳过</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="4">
+        <p class="panel__kicker">收尾</p>
+        <h2 class="h2">现在，再感觉一下。</h2>
+        <div class="intensity-wrap">
+          <div class="intensity-num" id="sos-after-num">5</div>
+          <div class="intensity-side">
+            <label class="small" for="sos-after">现在的不舒服，几分？</label>
+            <input class="range" type="range" id="sos-after" min="0" max="10" value="5" step="1" aria-label="之后强度">
+            <div class="intensity-scale"><span>0 还好</span><span>10 快撑不住</span></div>
+          </div>
+        </div>
+        <div class="field mt-24"><span class="label">此刻我需要（可多选）</span>
+          <div class="chips" id="sos-need">
+            <button class="chip" data-need="被抱一下">被抱一下</button>
+            <button class="chip" data-need="有人说说话">有人说说话</button>
+            <button class="chip" data-need="睡一觉">睡一觉</button>
+            <button class="chip" data-need="吃点东西">吃点东西</button>
+            <button class="chip" data-need="一个人待着">一个人待着</button>
+            <button class="chip" data-need="说不清">说不清</button>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-finish">完成着陆</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="5">
+        <div class="done-mark">✓</div>
+        <h2 class="h2">着陆完成。</h2>
+        <p class="lede">你没有解决任何问题，也不需要。强度从 <b id="sos-delta-before">7</b> 到 <b id="sos-delta-after">5</b>。<span class="delta" id="sos-delta"></span></p>
+        <div class="answer-card mt-24"><p><b>接下来只做一件小事。</b>喝水、洗脸、站起来走十步，选一个。做完就可以停。</p></div>
+        <p class="small muted mt-16">如果现在有伤害自己的念头，请直接拨打 <b>12356</b>，或告诉身边的人。这不是打扰。</p>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="close-sos">回到工作台</button>
+          <button class="btn btn--ghost" data-action="sos-restart">再来一轮</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ 反刍拦截浮层 ============ -->
+<div class="overlay" id="intercept-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="it-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="it-kicker">反刍拦截 · 1 / 3</span>
+        <div class="steps-dots" id="it-dots" aria-hidden="true"><i class="is-on"></i><i></i><i></i></div>
+      </div>
+      <button class="panel__close" data-action="close-intercept" aria-label="关闭拦截">×</button>
+    </div>
+    <div class="panel__body">
+
+      <section class="step is-on" data-it-step="1">
+        <h2 class="h2" id="it-title">现在循环的是哪一句？</h2>
+        <p class="lede">不用完整、不用准确。写下最刺的那一句。</p>
+        <textarea id="it-thought" class="mt-16" placeholder="例：对方拒绝我，是不是说明我这个人不行"></textarea>
+        <div class="field mt-16"><span class="label">它主要是哪一种？</span>
+          <div class="kind-list" id="it-kinds">
+            <button class="kind-btn" data-kind="why"><span class="k-letter">?</span><span class="k-text"><b>为什么是我 / 为什么会这样</b><small>在找一个不会改变结果的解释</small></span></button>
+            <button class="kind-btn" data-kind="if"><span class="k-letter">→</span><span class="k-text"><b>如果……怎么办</b><small>提前演练没发生的坏结果</small></span></button>
+            <button class="kind-btn" data-kind="self"><span class="k-letter">·</span><span class="k-text"><b>是我不够好</b><small>把一次拒绝当成整个人的评分</small></span></button>
+            <button class="kind-btn" data-kind="her"><span class="k-letter">○</span><span class="k-text"><b>对方到底怎么想</b><small>猜一个无法验证的答案</small></span></button>
+            <button class="kind-btn" data-kind="other"><span class="k-letter">…</span><span class="k-text"><b>说不清，就是停不下来</b><small>先登记，不分类也可以</small></span></button>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="it-next">下一步</button>
+          <button class="btn btn--ghost" data-action="open-sos">先做 60 秒着陆</button>
+        </div>
+      </section>
+
+      <section class="step" data-it-step="2">
+        <p class="panel__kicker">把它放回纸面</p>
+        <h2 class="h2" id="it-answer-title"></h2>
+        <div class="answer-card" id="it-answer"></div>
+        <div class="field mt-16" id="it-action-field">
+          <label for="it-action" id="it-action-label">下一步我打算…</label>
+          <textarea id="it-action" placeholder="一句话就够，具体到 10 分钟内能做"></textarea>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="it-save">存进盒子</button>
+          <button class="btn btn--ghost" data-action="it-back">返回修改</button>
+        </div>
+      </section>
+
+      <section class="step" data-it-step="3">
+        <div class="done-mark">↺</div>
+        <h2 class="h2">已经拿出来了。</h2>
+        <p class="lede" id="it-done-text"></p>
+        <div class="answer-card mt-24"><p><b>重复出现不是新证据。</b>同一个念头第 5 次来，它依然不是新信息。</p></div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="close-intercept">合上</button>
+          <button class="btn btn--ghost" data-action="open-sos">做 60 秒着陆</button>
+          <button class="btn btn--ghost" data-action="it-again">还有一句</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============ 打印口袋卡 ============ -->
+<div class="pocket print-only" id="pocket">
+  <div class="pocket__head"><b>着陆台 · 口袋卡</b><span>WHEN IT HITS</span></div>
+  <div class="pocket__cols">
+    <div>
+      <h4>先让身体下来（约 2 分钟）</h4>
+      <ol>
+        <li>呼气比吸气长：吸 4 秒，停 2 秒，呼 6 秒，做 5 轮。</li>
+        <li>5-4-3-2-1：看 5 样、摸 4 样、听 3 种、闻 2 种、尝 1 种。</li>
+        <li>把手放在桌面上，感觉接触面 10 秒。</li>
+      </ol>
+      <h4 style="margin-top:10px">现在只做一件</h4>
+      <ul>
+        <li>喝一口水 / 洗把脸 / 站起来走十步。</li>
+      </ul>
+    </div>
+    <div>
+      <h4>反刍来了，只做三步</h4>
+      <ol>
+        <li>写下那一句最刺的话，不展开。</li>
+        <li>问：想完之后，我多了一条能做的事吗？没有 = 反刍。</li>
+        <li>存进盒子，留到今天的担忧窗口（默认 19:30，15 分钟）。</li>
+      </ol>
+      <h4 style="margin-top:10px">三句实话</h4>
+      <ul>
+        <li>对方的想法不可知，再想也不会变可知。</li>
+        <li>被拒绝是匹配结果，不是价值评分。</li>
+        <li>能 100% 确定的是下一个动作。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="pocket__line"><span>数据只在本机 · 不是医疗工具</span><span class="pocket__crisis">12356 · 010-82951332 · 120/110</span></div>
+</div>

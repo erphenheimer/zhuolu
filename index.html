@@ -1,0 +1,3489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2eee3">
+<title>着陆台 · 反刍与焦虑自助工作台</title>
+<meta name="description" content="一个本地、离线、无账号的中文心理自助工作台：被拒绝、断联或关系受挫后的反刍与焦虑，先着陆，再整理。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20rx=%2214%22%20fill=%22%234a6655%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2232%22%20r=%2215%22%20fill=%22none%22%20stroke=%22%23f2eee3%22%20stroke-width=%223%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2232%22%20r=%224%22%20fill=%22%23f2eee3%22/%3E%3C/svg%3E">
+<script>
+(function(){try{
+var raw=localStorage.getItem('zhuolu.v1');var s=raw?JSON.parse(raw):{};
+var t=(s.settings&&s.settings.theme)||'auto';
+var dark=t==='dark'||(t!=='light'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
+document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+var m=(s.settings&&s.settings.motion)||'auto';
+var reduce=m==='reduce'||(m!=='full'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+document.documentElement.setAttribute('data-motion',reduce?'reduce':'full');
+}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+</script>
+<style>
+/* ============================================================
+   着陆台 · 样式 01 —— 设计令牌、基底、布局、导航、常用组件
+   纸感暖色 · 宋体大标题 · 鼠尾草绿 · 陶土红
+   ============================================================ */
+
+:root {
+  --bg: #f2eee3;
+  --bg-2: #eae4d5;
+  --surface: #fbf8ef;
+  --surface-2: #f5f0e2;
+  --surface-3: #ece5d3;
+  --ink: #22211b;
+  --ink-2: #4e4a40;
+  --muted: #6b6558;
+  --line: #ddd5c2;
+  --line-soft: #e8e1d0;
+  --sage: #4a6655;
+  --sage-2: #3e5a49;
+  --sage-deep: #2f4638;
+  --sage-soft: #e2e9df;
+  --sage-line: #b9c9bc;
+  --clay: #8f4c33;
+  --clay-soft: #f0ddd3;
+  --gold: #a8894f;
+  --blue: #4c6479;
+  --danger: #9c3f34;
+  --cream: #f6f1e3;
+  --r-sm: 10px;
+  --r: 16px;
+  --r-lg: 24px;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-serif: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Songti SC", "STSong", "SimSun", serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --shadow-1: 0 1px 2px rgba(34, 33, 27, .04), 0 10px 30px -22px rgba(34, 33, 27, .35);
+  --shadow-2: 0 2px 4px rgba(34, 33, 27, .05), 0 24px 60px -32px rgba(34, 33, 27, .45);
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --maxw: 780px;
+  --rail-w: 252px;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --bg: #141410;
+  --bg-2: #191914;
+  --surface: #1d1d17;
+  --surface-2: #24241c;
+  --surface-3: #2b2b21;
+  --ink: #ece7d8;
+  --ink-2: #c9c3b2;
+  --muted: #948d7c;
+  --line: #35352a;
+  --line-soft: #2c2c22;
+  --sage: #93b5a0;
+  --sage-2: #a9c6b4;
+  --sage-deep: #1b2a22;
+  --sage-soft: #22302a;
+  --sage-line: #3d5548;
+  --clay: #cf8b70;
+  --clay-soft: #33231d;
+  --gold: #c8a96c;
+  --blue: #93aec4;
+  --danger: #d98b7e;
+  --cream: #f0ebdb;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 30px -24px rgba(0, 0, 0, .8);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, .35), 0 30px 70px -40px rgba(0, 0, 0, .9);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .55;
+  background-image: radial-gradient(rgba(34, 33, 27, .055) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
+html[data-theme="dark"] body::before { opacity: .3; background-image: radial-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px); }
+
+::selection { background: var(--sage-soft); color: var(--ink); }
+
+a { color: var(--sage); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+button { font: inherit; color: inherit; }
+
+h1, h2, h3, h4, p, ul, ol, figure { margin: 0; }
+
+ul, ol { padding: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.skip {
+  position: fixed;
+  left: 12px;
+  top: -60px;
+  z-index: 200;
+  padding: 10px 16px;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 999px;
+  transition: top .2s var(--ease);
+}
+.skip:focus { top: 12px; }
+
+/* ---------- 字体与通用文字 ---------- */
+
+.serif { font-family: var(--font-serif); font-weight: 400; }
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.eyebrow::after {
+  content: "";
+  height: 1px;
+  width: 34px;
+  background: var(--line);
+  display: inline-block;
+}
+
+.h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(30px, 4.6vw, 42px);
+  line-height: 1.28;
+  letter-spacing: .01em;
+  margin-bottom: 16px;
+}
+.h2 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(23px, 3vw, 28px);
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+.h3 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.lede { color: var(--ink-2); font-size: 16px; max-width: 62ch; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; line-height: 1.65; }
+.tiny { font-size: 11px; letter-spacing: .06em; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.note {
+  font-size: 13px;
+  color: var(--muted);
+  border-left: 2px solid var(--sage-line);
+  padding-left: 12px;
+  line-height: 1.7;
+}
+.link {
+  color: var(--sage);
+  font-size: 14px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--sage-line);
+  padding-bottom: 1px;
+}
+.link:hover { border-color: var(--sage); }
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--sage);
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--sage-line);
+}
+.link-btn:hover { border-color: var(--sage); }
+
+/* ---------- 骨架 ---------- */
+
+.shell {
+  position: relative;
+  z-index: 1;
+  margin-left: var(--rail-w);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  width: 100%;
+  max-width: calc(var(--maxw) + 96px);
+  margin: 0 auto;
+  padding: 40px 48px 120px;
+  flex: 1;
+}
+
+.view { display: none; animation: viewIn .38s var(--ease) both; }
+.view.is-active { display: block; }
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+html[data-motion="reduce"] *,
+html[data-motion="reduce"] *::before,
+html[data-motion="reduce"] *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 48px;
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px);
+}
+.topbar__brand {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: var(--muted);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar__brand b { color: var(--ink-2); font-weight: 600; letter-spacing: .1em; }
+.topbar__spacer { flex: 1; }
+
+.site-foot {
+  border-top: 1px solid var(--line-soft);
+  padding: 26px 48px 34px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.site-foot a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.site-foot a:hover { color: var(--ink-2); }
+
+/* ---------- 左侧导航 ---------- */
+
+.rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--rail-w);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 30px 22px 26px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg-2);
+}
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px 26px;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--sage-line);
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.brand-mark::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 1px var(--sage-deep) inset;
+}
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1px dashed var(--sage-line);
+}
+.rail__brand b {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: .12em;
+  line-height: 1.2;
+}
+.rail__brand span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .26em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.rail__nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 15px;
+  transition: background .2s var(--ease), color .2s var(--ease);
+}
+.nav-item .nav-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--muted);
+  width: 18px;
+  flex: none;
+}
+.nav-item .nav-d {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  letter-spacing: .02em;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.nav-item.is-on { background: var(--sage-soft); color: var(--ink); }
+.nav-item.is-on .nav-k, .nav-item.is-on .nav-d { color: var(--sage); }
+
+.rail__foot { margin-top: auto; padding: 0 6px; display: flex; flex-direction: column; gap: 14px; }
+.rail__link { font-size: 13px; color: var(--muted); text-decoration: none; }
+.rail__link:hover { color: var(--ink-2); }
+.rail__note { font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+/* ---------- 移动端顶栏与底栏 ---------- */
+
+.mobile-brand { display: none; }
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line-soft);
+}
+.bottom-nav__inner { display: flex; justify-content: space-around; align-items: stretch; }
+.bnav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 2px 5px;
+  border-radius: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+}
+.bnav-item svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.bnav-item.is-on { color: var(--sage); background: var(--sage-soft); }
+.bnav-sos {
+  flex: none;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin: -22px 4px 0;
+  padding: 9px 4px 6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sage-deep);
+  color: var(--cream);
+  font-size: 9.5px;
+  letter-spacing: .04em;
+  box-shadow: 0 8px 20px -8px rgba(47, 70, 56, .7);
+  cursor: pointer;
+}
+[data-theme="dark"] .bottom-nav__inner { color: inherit; }
+
+/* ---------- 按钮 ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: .02em;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform .18s var(--ease), background .18s var(--ease), border-color .18s var(--ease), box-shadow .18s var(--ease);
+}
+.btn:hover { transform: translateY(-1px); border-color: var(--sage-line); box-shadow: var(--shadow-1); }
+.btn:active { transform: translateY(0); }
+.btn--primary {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: #f7f4e9;
+}
+.btn--primary:hover { background: var(--sage-2); border-color: var(--sage-2); }
+.btn--ghost { background: transparent; border-color: var(--line); }
+.btn--ghost:hover { background: var(--surface-2); }
+.btn--sm { min-height: 36px; padding: 0 14px; font-size: 13px; }
+.btn--block { width: 100%; }
+.btn--clay { background: var(--clay); border-color: var(--clay); color: #fdf6ef; }
+.btn--clay:hover { filter: brightness(.96); }
+.btn--danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+.btn--quiet { border-color: transparent; background: transparent; color: var(--muted); }
+.btn--quiet:hover { color: var(--ink); background: var(--surface-2); box-shadow: none; }
+.btn[disabled] { opacity: .45; pointer-events: none; }
+.btn .arrow { transition: transform .2s var(--ease); }
+.btn:hover .arrow { transform: translateX(3px); }
+
+.actions-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 26px; }
+
+/* ---------- 卡片 ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 26px 26px;
+  box-shadow: var(--shadow-1);
+  margin-bottom: 18px;
+}
+.card--flat { box-shadow: none; }
+.card--sage { background: var(--sage-soft); border-color: var(--sage-line); }
+.card--quiet { background: var(--surface-2); border-color: var(--line-soft); box-shadow: none; }
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.card-head .h3 { display: flex; align-items: center; gap: 10px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge--sage { background: var(--sage-soft); border-color: var(--sage-line); color: var(--sage); }
+.badge--clay { background: var(--clay-soft); border-color: transparent; color: var(--clay); }
+
+/* ---------- 表单 ---------- */
+
+.field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+.field > label, .field > .label {
+  font-size: 13px;
+  color: var(--ink-2);
+  letter-spacing: .03em;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+.field .hint { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+input[type="text"], input[type="time"], textarea, select {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 14px;
+  line-height: 1.6;
+  transition: border-color .18s var(--ease), background .18s var(--ease);
+}
+textarea { resize: vertical; min-height: 84px; }
+input[type="text"]:focus, input[type="time"]:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--sage);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sage) 12%, transparent);
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
+
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 34px;
+  background: transparent;
+  cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--sage) var(--p, 50%), var(--surface-3) var(--p, 50%));
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--sage);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+}
+.range::-moz-range-track { height: 4px; border-radius: 4px; background: var(--surface-3); }
+.range::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--sage); }
+.range::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--sage); }
+.range-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips--stack { flex-direction: column; align-items: stretch; }
+.chip {
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all .18s var(--ease);
+  text-align: left;
+}
+.chip:hover { border-color: var(--sage-line); color: var(--ink); }
+.chip.is-on { background: var(--sage-soft); border-color: var(--sage); color: var(--sage-deep); }
+[data-theme="dark"] .chip.is-on { color: var(--sage); }
+
+/* ---------- 主页 ---------- */
+
+.hero { padding: 10px 0 4px; }
+.hero__title {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(34px, 5.4vw, 52px);
+  line-height: 1.24;
+  letter-spacing: .01em;
+  margin: 0 0 18px;
+}
+.hero__title em { font-style: normal; color: var(--sage); }
+.hero__lede { color: var(--ink-2); font-size: 16px; max-width: 54ch; line-height: 1.75; }
+
+.sos {
+  margin: 34px 0 26px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+  padding: 30px 32px;
+  border: 0;
+  border-radius: 26px;
+  background: var(--sage-deep);
+  color: var(--cream);
+  cursor: pointer;
+  box-shadow: 0 18px 40px -28px rgba(30, 45, 36, .9);
+  transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+}
+.sos:hover { transform: translateY(-2px); box-shadow: 0 24px 50px -28px rgba(30, 45, 36, .95); }
+.sos__label { font-size: clamp(22px, 3.2vw, 27px); font-weight: 500; letter-spacing: .03em; z-index: 1; }
+.sos__sub { font-size: 12.5px; letter-spacing: .05em; color: rgba(246, 241, 227, .68); z-index: 1; }
+.sos__arrow { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); font-size: 22px; color: rgba(246, 241, 227, .6); z-index: 1; transition: transform .25s var(--ease); }
+.sos:hover .sos__arrow { transform: translateY(-50%) translateX(5px); }
+.sos__ring {
+  position: absolute;
+  right: -40px;
+  top: 50%;
+  width: 230px;
+  height: 230px;
+  margin-top: -115px;
+  border-radius: 50%;
+  border: 1px solid rgba(246, 241, 227, .14);
+  animation: breatheRing 9s var(--ease) infinite;
+}
+.sos__ring::before {
+  content: "";
+  position: absolute;
+  inset: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(246, 241, 227, .1);
+}
+@keyframes breatheRing {
+  0%, 100% { transform: scale(.9); opacity: .7; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+.quick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 30px; }
+.quick__item {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: all .2s var(--ease);
+}
+.quick__item:hover { border-color: var(--sage-line); background: var(--surface-2); transform: translateY(-2px); }
+.quick__k { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--sage); }
+.quick__t { font-size: 15px; font-weight: 600; line-height: 1.45; letter-spacing: .01em; }
+.quick__d { font-size: 12px; color: var(--muted); line-height: 1.55; }
+
+.truths { list-style: none; counter-reset: truth; display: grid; gap: 14px; margin: 4px 0 18px; }
+.truths li {
+  counter-increment: truth;
+  position: relative;
+  padding-left: 40px;
+  font-size: 14.5px;
+  color: var(--ink-2);
+  line-height: 1.75;
+}
+.truths li::before {
+  content: "0" counter(truth);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sage);
+  letter-spacing: .06em;
+  border: 1px solid var(--sage-line);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+.truths b { color: var(--ink); font-weight: 600; }
+
+.one-thing { margin: 26px 0 10px; padding: 22px 26px; border: 1px dashed var(--line); border-radius: var(--r-lg); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.one-thing .eyebrow { margin: 0; }
+.one-thing__text { flex: 1; min-width: 220px; font-family: var(--font-serif); font-size: 20px; line-height: 1.5; }
+
+.mini-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .02em;
+}
+.mini-stats b { color: var(--ink-2); font-family: var(--font-mono); font-size: 14px; font-weight: 500; margin-right: 3px; }
+
+/* ---------- 通用列表 ---------- */
+
+.list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+.item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.item:first-child { border-top: 0; }
+.item__main { flex: 1; min-width: 0; }
+.item__meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: .04em; white-space: nowrap; padding-top: 3px; }
+.item__text { overflow-wrap: anywhere; }
+.item__text b { font-weight: 600; }
+.empty { padding: 20px 0; color: var(--muted); font-size: 13px; text-align: center; border-top: 1px dashed var(--line-soft); }
+.icon-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  flex: none;
+}
+.icon-btn:hover { color: var(--danger); border-color: var(--danger); }
+
+/* ---------- 打印 ---------- */
+.print-only { display: none; }
+
+/* ============================================================
+   着陆台 · 样式 02 —— 各视图、浮层、呼吸、打印、响应式
+   ============================================================ */
+
+/* ---------- 视图头 ---------- */
+
+.view-head { margin: 4px 0 26px; }
+.view-head .h1 { margin-bottom: 12px; }
+.view-head .lede { max-width: 58ch; }
+
+.divider { height: 1px; background: var(--line-soft); margin: 34px 0; border: 0; }
+
+/* ---------- 反刍：担忧窗口 ---------- */
+
+.window-card { position: relative; overflow: hidden; }
+.window-card::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px solid var(--sage-line);
+  opacity: .45;
+  pointer-events: none;
+}
+.window-time {
+  font-family: var(--font-serif);
+  font-size: clamp(44px, 7vw, 58px);
+  line-height: 1;
+  letter-spacing: .02em;
+  margin: 6px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.window-time small { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; color: var(--muted); margin-left: 10px; text-transform: uppercase; }
+.window-status { font-size: 13.5px; color: var(--ink-2); }
+.window-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--sage); font-family: var(--font-mono); letter-spacing: .06em; }
+.window-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sage) 18%, transparent); }
+.window-state.is-closed { color: var(--muted); }
+.window-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.window-timer { margin-top: 14px; }
+.window-timer__bar { height: 3px; background: var(--surface-3); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.window-timer__bar span { display: block; height: 100%; background: var(--sage); width: 100%; transition: width 1s linear; }
+.window-timer__label { font-family: var(--font-mono); font-size: 12px; color: var(--sage); letter-spacing: .08em; display: flex; justify-content: space-between; }
+
+/* ---------- 确定性四格 ---------- */
+
+.claims { list-style: none; display: grid; gap: 2px; margin: 8px 0 8px; }
+.claims li {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 16px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.claims li:first-child { border-top: 0; }
+.claims .num {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--sage);
+  padding-top: 2px;
+}
+.claims b { display: block; font-size: 15.5px; font-weight: 600; margin-bottom: 4px; letter-spacing: .01em; }
+.claims p { font-size: 14px; color: var(--ink-2); line-height: 1.7; }
+.claims .tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--muted); }
+
+.matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 22px 0 8px; }
+.matrix__cell {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 190px;
+}
+.matrix__cell .cell-head { display: flex; align-items: baseline; gap: 9px; }
+.matrix__cell .cell-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.matrix__cell h3 { font-size: 14.5px; font-weight: 600; letter-spacing: .01em; }
+.matrix__cell .cell-hint { font-size: 11.5px; color: var(--muted); line-height: 1.55; min-height: 32px; }
+.matrix__cell textarea {
+  flex: 1;
+  min-height: 92px;
+  background: var(--surface-2);
+  border-color: transparent;
+  font-size: 14px;
+}
+.matrix__cell--fact { background: var(--sage-soft); border-color: var(--sage-line); }
+.matrix__cell--fact .cell-k { border-color: var(--sage-line); color: var(--sage); }
+.matrix__cell--interp { background: var(--surface-2); border-color: var(--line-soft); border-style: dashed; }
+.matrix__cell--unknown { background: var(--surface); }
+.matrix__cell--unknown .cell-k { color: var(--clay); border-color: var(--clay-soft); }
+.matrix__cell--next { background: var(--clay-soft); border-color: transparent; }
+.matrix__cell--next .cell-k { color: var(--clay); border-color: rgba(167, 95, 67, .3); }
+[data-theme="dark"] .matrix__cell--next { background: #2b201a; }
+[data-theme="dark"] .matrix__cell--fact { background: #1e2a23; }
+.matrix__cell textarea:focus { background: var(--surface); border-color: var(--sage); }
+
+.cert-list .item__text { font-size: 13px; color: var(--ink-2); }
+.cert-list .next-line { color: var(--ink); }
+
+/* ---------- 今日 ---------- */
+
+.check-list { display: flex; flex-direction: column; }
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 15px 2px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+}
+.check-row:first-child { border-top: 0; }
+.check-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--surface-2);
+  flex: none;
+  display: grid;
+  place-items: center;
+  transition: all .18s var(--ease);
+  margin-top: 1px;
+}
+.check-box svg { width: 14px; height: 14px; stroke: #f7f4e9; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transform: scale(.6); transition: all .18s var(--ease); }
+.check-row[aria-checked="true"] .check-box { background: var(--sage); border-color: var(--sage); }
+.check-row[aria-checked="true"] .check-box svg { opacity: 1; transform: scale(1); }
+.check-row__t { flex: 1; }
+.check-row__t b { display: block; font-size: 14.5px; font-weight: 500; }
+.check-row__t small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.6; margin-top: 2px; }
+.check-row[aria-checked="true"] .check-row__t b { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.today-progress { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); }
+
+.timer-line { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
+.timer-big { font-family: var(--font-serif); font-size: 38px; letter-spacing: .03em; font-variant-numeric: tabular-nums; line-height: 1; }
+.timer-bar { flex: 1; min-width: 140px; height: 3px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.timer-bar span { display: block; height: 100%; background: var(--sage); width: 0; transition: width .5s linear; }
+
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 6px; }
+.week__day { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); letter-spacing: .04em; }
+.week__dot { width: 100%; aspect-ratio: 1; max-width: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+.week__day.is-today .week__dot { border-color: var(--sage-line); }
+.week__dot.is-1 { background: var(--sage-soft); border-color: var(--sage-line); color: var(--sage); }
+.week__dot.is-2 { background: var(--sage); border-color: var(--sage); color: #f7f4e9; }
+.week__dot.is-3 { background: var(--sage-deep); border-color: var(--sage-deep); color: #f6f1e3; }
+
+.sleep-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.sleep-grid textarea { min-height: 76px; font-size: 13.5px; }
+.sleep-grid .field { margin-bottom: 0; }
+
+/* ---------- 更多 / 记录 / 卡库 ---------- */
+
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+.tab {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 34px;
+}
+.tab.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+[data-theme="dark"] .tab.is-on { background: var(--cream); border-color: var(--cream); color: #191914; }
+.tab-panel { display: none; }
+.tab-panel.is-on { display: block; }
+
+.acc { border-top: 1px solid var(--line-soft); }
+.acc:first-of-type { border-top: 0; }
+.acc summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 2px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.acc summary::-webkit-details-marker { display: none; }
+.acc summary .acc-k { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: .06em; flex: none; width: 20px; }
+.acc summary .acc-plus { margin-left: auto; color: var(--muted); transition: transform .2s var(--ease); font-size: 16px; flex: none; }
+.acc[open] summary .acc-plus { transform: rotate(45deg); }
+.acc .acc-body { padding: 0 2px 20px 34px; font-size: 14px; color: var(--ink-2); line-height: 1.8; }
+.acc .acc-body p + p { margin-top: 8px; }
+.acc .acc-body .src { display: block; margin-top: 10px; font-size: 11px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .02em; }
+
+.help-list { display: grid; gap: 10px; }
+.support-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.script-box {
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  margin-top: 12px;
+}
+.script-box b { color: var(--ink); }
+
+.data-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.crisis-lines { display: grid; gap: 2px; margin-top: 10px; }
+.crisis-line { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; padding: 11px 0; border-top: 1px solid var(--line-soft); }
+.crisis-line:first-child { border-top: 0; }
+.crisis-line b { font-family: var(--font-mono); font-size: 15px; letter-spacing: .03em; font-weight: 500; }
+.crisis-line span { font-size: 12px; color: var(--muted); text-align: right; }
+
+/* ---------- 浮层 ---------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 19, 15, .55);
+  backdrop-filter: blur(7px);
+  animation: fadeIn .22s var(--ease) both;
+}
+.overlay[hidden] { display: none; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.panel {
+  width: min(620px, 100%);
+  max-height: min(86vh, 860px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow-2);
+  animation: panelIn .3s var(--ease) both;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+}
+@keyframes panelIn { from { opacity: 0; transform: translateY(14px) scale(.99); } to { opacity: 1; transform: none; } }
+.panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 24px 0;
+  flex: none;
+}
+.panel__body { padding: 18px 24px 26px; }
+.panel__foot { padding: 0 24px 24px; flex: none; }
+.panel__close {
+  border: 1px solid var(--line);
+  background: transparent;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  flex: none;
+  font-size: 16px;
+  line-height: 1;
+}
+.panel__close:hover { color: var(--ink); border-color: var(--ink-2); }
+.panel__kicker { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.panel .h2 { margin-bottom: 8px; }
+.panel .lede { font-size: 14.5px; }
+
+.steps-dots { display: flex; gap: 6px; align-items: center; }
+.steps-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .2s var(--ease); }
+.steps-dots i.is-on { background: var(--sage); }
+.steps-dots i.is-done { background: var(--sage-line); }
+
+.step { display: none; }
+.step.is-on { display: block; animation: stepIn .3s var(--ease) both; }
+@keyframes stepIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.step-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.step-actions .btn { flex: 1 1 auto; }
+
+.intensity-wrap { display: flex; align-items: center; gap: 18px; }
+.intensity-num { font-family: var(--font-serif); font-size: 58px; line-height: 1; min-width: 76px; text-align: center; color: var(--sage); font-variant-numeric: tabular-nums; }
+.intensity-side { flex: 1; }
+.intensity-side .small { color: var(--muted); }
+.intensity-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 2px; font-family: var(--font-mono); letter-spacing: .06em; }
+
+/* ---------- 呼吸 ---------- */
+
+.breathe {
+  display: grid;
+  place-items: center;
+  gap: 22px;
+  padding: 18px 0 6px;
+  text-align: center;
+}
+.breathe__stage {
+  position: relative;
+  width: 250px;
+  height: 250px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.breathe__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--sage-line);
+  opacity: .5;
+}
+.breathe__halo--2 { inset: 22px; opacity: .35; }
+.breathe__circle {
+  width: 152px;
+  height: 152px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, var(--sage-soft), var(--sage) 130%);
+  box-shadow: 0 18px 50px -22px rgba(47, 70, 56, .55), inset 0 0 0 1px rgba(255, 255, 255, .18);
+  transition: transform 4s linear, opacity .5s var(--ease);
+  transform: scale(.82);
+}
+.breathe__phase {
+  position: absolute;
+  font-family: var(--font-serif);
+  font-size: 25px;
+  letter-spacing: .22em;
+  text-indent: .22em;
+  color: var(--sage-deep);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .2);
+}
+[data-theme="dark"] .breathe__phase { color: #1d2a22; }
+.breathe__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .18em;
+  color: var(--muted);
+}
+.breathe__hint { font-size: 12.5px; color: var(--muted); letter-spacing: .04em; }
+.breathe__bar { width: 220px; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.breathe__bar span { display: block; height: 100%; width: 0; background: var(--sage); transition: width .9s linear; }
+.breathe__stage.is-in .breathe__circle { transform: scale(1.18); transition-duration: 4s; }
+.breathe__stage.is-hold .breathe__circle { transform: scale(1.18); transition-duration: .2s; }
+.breathe__stage.is-out .breathe__circle { transform: scale(.82); transition-duration: 6s; }
+.breathe__stage.is-idle .breathe__circle { transform: scale(.82); transition-duration: 1s; }
+
+/* ---------- 接地 ---------- */
+
+.ground-list { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 4px; }
+.ground-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all .18s var(--ease);
+}
+.ground-row:hover { border-color: var(--sage-line); }
+.ground-row__sense { font-family: var(--font-serif); font-size: 19px; width: 28px; color: var(--sage); flex: none; }
+.ground-row__t { flex: 1; }
+.ground-row__t b { display: block; font-size: 14px; font-weight: 500; line-height: 1.45; }
+.ground-row__t small { font-size: 11.5px; color: var(--muted); }
+.ground-dots { display: flex; gap: 5px; flex: none; }
+.ground-dots i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--sage-line); transition: all .2s var(--ease); }
+.ground-dots i.is-on { background: var(--sage); border-color: var(--sage); }
+.ground-row.is-done { background: var(--sage-soft); border-color: var(--sage-line); }
+.ground-row.is-done .ground-row__t b { color: var(--sage-deep); }
+[data-theme="dark"] .ground-row.is-done .ground-row__t b { color: var(--sage); }
+
+/* ---------- 反刍拦截 ---------- */
+
+.kind-list { display: grid; gap: 8px; margin: 16px 0 4px; }
+.kind-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 13px 16px;
+  cursor: pointer;
+  transition: all .18s var(--ease);
+}
+.kind-btn:hover { border-color: var(--sage-line); background: var(--surface); }
+.kind-btn.is-on { border-color: var(--sage); background: var(--sage-soft); }
+.kind-btn .k-letter { font-family: var(--font-serif); font-size: 20px; color: var(--sage); width: 22px; flex: none; }
+.kind-btn .k-text { flex: 1; }
+.kind-btn .k-text b { display: block; font-size: 14px; font-weight: 500; }
+.kind-btn .k-text small { font-size: 11.5px; color: var(--muted); }
+
+.answer-card {
+  background: var(--surface-2);
+  border-left: 2px solid var(--sage);
+  border-radius: 0 16px 16px 0;
+  padding: 18px 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+.answer-card b { color: var(--ink); font-weight: 600; }
+.answer-card p + p { margin-top: 8px; }
+.answer-card .em { color: var(--sage); font-weight: 600; }
+
+.check-line { display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--ink-2); margin-top: 14px; }
+.check-line .count { font-family: var(--font-mono); font-size: 26px; color: var(--clay); line-height: 1; }
+
+.done-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1px solid var(--sage-line);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-serif);
+  color: var(--sage);
+  font-size: 22px;
+  margin-bottom: 18px;
+  background: var(--sage-soft);
+}
+.delta { font-family: var(--font-mono); font-size: 12px; color: var(--sage); letter-spacing: .08em; }
+.delta.is-up { color: var(--clay); }
+
+/* ---------- 提示 ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 92px;
+  transform: translate(-50%, 14px);
+  z-index: 150;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 13px;
+  letter-spacing: .02em;
+  padding: 10px 18px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all .25s var(--ease);
+  max-width: calc(100vw - 40px);
+  text-align: center;
+}
+[data-theme="dark"] .toast { background: var(--cream); color: #191914; }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 打印口袋卡 ---------- */
+
+.pocket {
+  display: none;
+  background: #fbf8ef;
+  color: #22211b;
+  padding: 22px 24px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  border: 1px solid #d8d0bc;
+}
+.pocket__head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #2f4638; padding-bottom: 8px; margin-bottom: 14px; }
+.pocket__head b { font-family: "SimSun", serif; font-size: 23px; letter-spacing: .1em; font-weight: 400; }
+.pocket__head span { font-family: Consolas, monospace; font-size: 9px; letter-spacing: .16em; color: #6f6a60; }
+.pocket__cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.pocket h4 { font-size: 13px; letter-spacing: .08em; margin: 0 0 7px; color: #4f6f5c; }
+.pocket ol, .pocket ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.9; }
+.pocket li { margin-bottom: 2px; }
+.pocket__line { margin-top: 16px; padding-top: 10px; border-top: 1px dashed #c9c1ae; font-size: 11.5px; color: #4e4a40; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pocket__crisis { font-family: Consolas, monospace; font-size: 10px; }
+
+@media print {
+  html, body { background: #fff !important; }
+  body::before, .rail, .shell, .bottom-nav, .overlay, .toast { display: none !important; }
+  .print-only { display: block !important; }
+  .pocket { display: block !important; page-break-inside: avoid; }
+  @page { size: A5 landscape; margin: 8mm; }
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1080px) {
+  .main { padding: 34px 36px 110px; }
+  .topbar { padding: 16px 36px; }
+  .site-foot { padding: 24px 36px 30px; }
+}
+
+@media (max-width: 980px) {
+  :root { --rail-w: 0px; }
+  .rail { display: none; }
+  .shell { margin-left: 0; }
+  .bottom-nav { display: block; }
+  .mobile-brand { display: flex; align-items: center; gap: 10px; }
+  .mobile-brand .brand-mark { width: 28px; height: 28px; }
+  .mobile-brand b { font-family: var(--font-serif); font-weight: 400; font-size: 17px; letter-spacing: .12em; }
+  .topbar { padding: 14px 22px; }
+  .main { padding: 26px 22px 120px; }
+  .site-foot { padding: 22px 22px 96px; display: block; }
+  .site-foot span { display: block; margin-top: 4px; }
+  .panel { max-height: 92vh; }
+}
+
+@media (max-width: 700px) {
+  .quick { grid-template-columns: 1fr; }
+  .matrix { grid-template-columns: 1fr; }
+  .matrix__cell { min-height: 0; }
+  .sleep-grid { grid-template-columns: 1fr; }
+  .support-row { grid-template-columns: 1fr; }
+  .overlay { padding: 0; align-items: flex-end; }
+  .panel { width: 100%; max-height: 94vh; border-radius: 24px 24px 0 0; border-bottom: 0; }
+  .panel__head { padding: 18px 20px 0; }
+  .panel__body { padding: 16px 20px 24px; }
+  .panel__foot { padding: 0 20px 20px; }
+  .hero__title { font-size: 34px; }
+  .sos { padding: 26px 24px; }
+  .sos__arrow { display: none; }
+  .one-thing { padding: 18px 20px; }
+  .claims li { grid-template-columns: 38px 1fr; gap: 12px; }
+  .claims .num { font-size: 24px; }
+  .breathe__stage { width: 220px; height: 220px; }
+  .breathe__circle { width: 132px; height: 132px; }
+  .intensity-num { font-size: 46px; min-width: 62px; }
+  .window-time { font-size: 46px; }
+  .toast { bottom: 104px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ============================================================
+   着陆台 · 样式 03 —— 补丁与工具类
+   ============================================================ */
+
+[hidden] { display: none !important; }
+
+.is-locked { overflow: hidden; }
+
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-16 { margin-bottom: 16px; }
+
+.window-status b { color: var(--ink); font-weight: 600; }
+.window-status .window-state { margin-right: 4px; }
+
+.window-edit {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+.window-edit__row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.window-edit__row input { flex: 1; }
+
+.park-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+.park-form textarea { min-height: 68px; }
+
+.cert-lines { display: flex; flex-direction: column; gap: 3px; }
+.cert-line { display: flex; gap: 8px; font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+.cert-k {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.cert-v { overflow-wrap: anywhere; }
+.cert-list .item { align-items: flex-start; }
+.cert-list .item__meta { margin-bottom: 2px; }
+
+.one-thing > div:first-child { flex: 1; min-width: 220px; }
+.one-thing .eyebrow { margin-bottom: 6px; }
+
+.support-row .field { margin-bottom: 10px; }
+.support-row + .field { margin-top: 4px; }
+
+.panel .chips { margin-top: 2px; }
+
+.intensity-side label { display: block; margin-bottom: 2px; }
+
+.ground-row .ground-row__t small { display: block; }
+
+.acc summary:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+
+.tag {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: var(--muted);
+}
+
+.topbar .btn { flex: none; }
+
+@media (max-width: 980px) {
+  .topbar__brand { display: none; }
+  .topbar__spacer { display: block; }
+}
+
+@media (max-width: 700px) {
+  .tabs { flex-wrap: nowrap; overflow-x: auto; padding-right: 18px; padding-bottom: 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; }
+  .step-actions .btn { flex: 1 1 100%; }
+  .window-actions .btn { flex: 1 1 100%; }
+  .matrix__cell .cell-hint { min-height: 0; }
+}
+
+@media print {
+  .pocket { padding: 0; }
+  .pocket__cols { gap: 14px; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到内容</a>
+
+<aside class="rail" aria-label="侧边栏">
+  <div class="rail__brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div><b>着陆台</b><span>LANDING PAD</span></div>
+  </div>
+  <nav class="rail__nav" aria-label="主导航">
+    <a class="nav-item" href="#/now" data-route="now"><span class="nav-k">01</span><span>现在<span class="nav-d">难受的时候从这里开始</span></span></a>
+    <a class="nav-item" href="#/rumination" data-route="rumination"><span class="nav-k">02</span><span>反刍<span class="nav-d">登记、推迟、打断</span></span></a>
+    <a class="nav-item" href="#/certainty" data-route="certainty"><span class="nav-k">03</span><span>确定性<span class="nav-d">事实 / 解释 / 不可知</span></span></a>
+    <a class="nav-item" href="#/today" data-route="today"><span class="nav-k">04</span><span>今日<span class="nav-d">做到一件就成立</span></span></a>
+  </nav>
+  <div class="rail__foot">
+    <button class="btn btn--primary btn--sm" data-action="open-sos">我现在很难受</button>
+    <a class="rail__link" href="#/more">记录 · 卡库 · 设置</a>
+    <p class="rail__note">所有内容只保存在这台设备的浏览器里，不上传。</p>
+  </div>
+</aside>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="mobile-brand"><span class="brand-mark" aria-hidden="true"></span><b>着陆台</b></div>
+    <div class="topbar__brand"><b>着陆台</b><span id="topbar-date"></span></div>
+    <div class="topbar__spacer"></div>
+    <button class="btn btn--ghost btn--sm" data-action="open-sos">应急着陆</button>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- ============ 现在 ============ -->
+    <section class="view is-active" data-view="now">
+      <div class="hero">
+        <p class="eyebrow" id="greet">现在</p>
+        <h1 class="hero__title">今天，<br>不用把任何事<em>想清楚</em>。</h1>
+        <p class="hero__lede">如果刚被拒绝、关系突然断了，或正在反复想同一件事——先让身体回到地面。想明白这件事，不差这一小时。</p>
+      </div>
+
+      <button class="sos" data-action="open-sos" aria-label="开始 60 秒着陆">
+        <span class="sos__ring" aria-hidden="true"></span>
+        <span class="sos__label">我现在很难受</span>
+        <span class="sos__sub">60 秒着陆 · 不解决任何事</span>
+        <span class="sos__arrow" aria-hidden="true">→</span>
+      </button>
+
+      <div class="quick">
+        <button class="quick__item" data-action="go" data-route="rumination">
+          <span class="quick__k">01</span>
+          <span class="quick__t">我停不下来地反刍</span>
+          <span class="quick__d">把循环拿出来，只登记，不展开</span>
+        </button>
+        <button class="quick__item" data-action="go" data-route="certainty">
+          <span class="quick__k">02</span>
+          <span class="quick__t">我想确定对方到底怎么想</span>
+          <span class="quick__d">分成：事实、解释、不可知、下一步</span>
+        </button>
+      </div>
+
+      <div class="card card--quiet">
+        <div class="card-head"><h2 class="h3">确定性的三个来源</h2><span class="badge">先看这个</span></div>
+        <ol class="truths">
+          <li><b>你的反应有机制。</b>被拒绝后的疼、反复想、睡不着，是应激反应和反刍循环，不是你太脆弱。</li>
+          <li><b>对方的想法和未来不可知。</b>再想一百遍也不会变成信息。反复猜只会制造假的确定感。</li>
+          <li><b>下一步可以 100% 确定。</b>比如现在喝一口水、洗把脸、把手机屏幕朝下。</li>
+        </ol>
+        <a class="link" href="#/certainty">做一次四格整理 →</a>
+      </div>
+
+      <div class="one-thing">
+        <div>
+          <p class="eyebrow">现在只做一件</p>
+          <p class="one-thing__text" id="one-thing">把手机翻过去，屏幕朝下。</p>
+        </div>
+        <button class="btn btn--ghost btn--sm" data-action="shuffle-thing">换一件</button>
+      </div>
+
+      <div class="mini-stats" id="home-stats"></div>
+      <div class="mini-stats" id="home-window" hidden></div>
+    </section>
+
+    <!-- ============ 反刍 ============ -->
+    <section class="view" data-view="rumination">
+      <header class="view-head">
+        <p class="eyebrow">反刍拦截</p>
+        <h1 class="h1">把循环从脑子里<br>拿出来。</h1>
+        <p class="lede">反刍不是思考：它没有终点，也不产生新信息。这里只做三件事——登记、推迟、打断。</p>
+      </header>
+
+      <div class="actions-row">
+        <button class="btn btn--primary" data-action="start-intercept">开始一次拦截</button>
+        <button class="btn btn--ghost" data-action="open-sos">先做 60 秒着陆</button>
+      </div>
+
+      <div class="card window-card">
+        <div class="card-head">
+          <h2 class="h3">担忧窗口</h2>
+          <button class="link-btn" data-action="toggle-window-edit">修改时间</button>
+        </div>
+        <div class="window-time"><span id="window-time">19:30</span><small>每天一次</small></div>
+        <p class="window-status" id="window-status"></p>
+        <div class="window-edit" id="window-edit" hidden>
+          <label class="small" for="window-time-input">每天几点处理积压的念头？</label>
+          <div class="window-edit__row">
+            <input type="time" id="window-time-input" value="19:30">
+            <button class="btn btn--primary btn--sm" data-action="save-window">保存</button>
+          </div>
+        </div>
+        <div class="window-timer" id="window-timer" hidden>
+          <div class="window-timer__label"><span>窗口剩余</span><span class="mono" id="window-countdown">15:00</span></div>
+          <div class="window-timer__bar"><span id="window-bar"></span></div>
+        </div>
+        <div class="window-actions">
+          <button class="btn btn--primary btn--sm" data-action="open-window" id="window-open-btn">现在开窗 15 分钟</button>
+          <button class="btn btn--ghost btn--sm" data-action="park-thought">先存一个念头</button>
+          <button class="btn btn--ghost btn--sm" data-action="close-window" id="window-close-btn" hidden>关窗</button>
+        </div>
+        <ul class="list" id="parked-list" hidden></ul>
+        <p class="small muted mt-12" id="parked-hint"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">反刍日志</h2><span class="badge" id="rum-count">今天 0 次</span></div>
+        <p class="small muted">这里只记录它来过。出现次数多，不代表它更真。</p>
+        <ul class="list mt-8" id="rum-list"></ul>
+      </div>
+
+      <p class="note">今天的目标不是“想通”，而是“少想一轮”。少一轮也算数。</p>
+    </section>
+
+    <!-- ============ 确定性 ============ -->
+    <section class="view" data-view="certainty">
+      <header class="view-head">
+        <p class="eyebrow">确定性</p>
+        <h1 class="h1">关于确定性，<br>三句实话。</h1>
+        <p class="lede">你想确定对方怎么想、还有没有机会。这部分没有答案。但“确定性”本身，可以从别的地方拿回来。</p>
+      </header>
+
+      <ol class="claims">
+        <li>
+          <span class="num">01</span>
+          <div><b>你能确定的，是你的反应有名字。</b><p>被拒绝会疼，通常不只是“没戏了”，还包括社会性的痛、对自我价值的威胁、以及对“以后不会再发生”的失控感。这是常见反应，不是你有问题。</p><span class="tag">有机制 · 可解释</span></div>
+        </li>
+        <li>
+          <span class="num">02</span>
+          <div><b>你不能确定的，是另一个人的内心。</b><p>对方为什么拒绝、真实的想法、你们以后还有没有可能——这些都在“不可知区”。你可以猜，但猜不会把它变成信息。反复求证只会短暂缓解，然后让下一次更难忍。</p><span class="tag">不可知 · 不求解</span></div>
+        </li>
+        <li>
+          <span class="num">03</span>
+          <div><b>你能 100% 确定的，是下一个动作。</b><p>不是“以后会不会好”，而是“接下来十分钟我做什么”。把注意力从不可知区搬到可控区，焦虑才会降下来。</p><span class="tag">可控 · 可执行</span></div>
+        </li>
+      </ol>
+
+      <div class="card mt-24">
+        <div class="card-head"><h2 class="h3">四格整理</h2><span class="badge">约 5 分钟</span></div>
+        <p class="small muted mb-16">把脑子里混在一起的东西分开。分开本身就会让强度降一点。写不完整也没关系。</p>
+        <div class="matrix">
+          <div class="matrix__cell matrix__cell--fact">
+            <div class="cell-head"><span class="cell-k">1</span><h3>已确定的事实</h3></div>
+            <p class="cell-hint">亲眼看到、亲耳听到、有记录。只写这些。</p>
+            <textarea id="cert-fact" placeholder="例：对方明确说了“我们还是做朋友”。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--interp">
+            <div class="cell-head"><span class="cell-k">2</span><h3>我的解释</h3></div>
+            <p class="cell-hint">推断、猜测、脑内旁白。写下来就会显形。</p>
+            <textarea id="cert-interp" placeholder="例：对方一定觉得我这个人很没意思。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--unknown">
+            <div class="cell-head"><span class="cell-k">3</span><h3>不可知 / 不求解</h3></div>
+            <p class="cell-hint">对方的真实想法、未来、没发生的事。</p>
+            <textarea id="cert-unknown" placeholder="例：对方以后会不会后悔；对方现在到底怎么看我。"></textarea>
+          </div>
+          <div class="matrix__cell matrix__cell--next">
+            <div class="cell-head"><span class="cell-k">4</span><h3>我的下一步</h3></div>
+            <p class="cell-hint">10 分钟内能做完的具体动作。</p>
+            <textarea id="cert-next" placeholder="例：把手机放客厅，去洗个脸。"></textarea>
+          </div>
+        </div>
+        <div class="actions-row mb-0">
+          <button class="btn btn--primary" data-action="save-cert">存下这一页</button>
+          <button class="btn btn--ghost" data-action="clear-cert">清空输入</button>
+        </div>
+        <p class="note mt-16">焦虑最常做的事，是把 ②（我的解释）当成 ①（事实）。写完先别改，看一眼两边的比例。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">已存下的整理</h2><span class="badge" id="cert-count">0 份</span></div>
+        <ul class="list cert-list" id="cert-list"></ul>
+      </div>
+    </section>
+
+    <!-- ============ 今日 ============ -->
+    <section class="view" data-view="today">
+      <header class="view-head">
+        <p class="eyebrow">今日</p>
+        <h1 class="h1">今天只需要<br>成立一次。</h1>
+        <p class="lede">适应期不需要高效，只需要不断线。下面的标准故意定得很低。</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">今日三件套</h2><span class="badge" id="today-progress">0 / 5</span></div>
+        <div class="check-list" id="today-checks">
+          <button class="check-row" data-check="sleep" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>睡了一会儿</b><small>哪怕分段、哪怕只有几小时</small></span>
+          </button>
+          <button class="check-row" data-check="eat" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>吃了点东西</b><small>不用是一顿饭，有热量就行</small></span>
+          </button>
+          <button class="check-row" data-check="move" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>动了 10 分钟</b><small>走到楼下再回来也算</small></span>
+          </button>
+          <button class="check-row" data-check="connect" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>和一个真人说了话</b><small>舍友、同学、店员都算</small></span>
+          </button>
+          <button class="check-row" data-check="push" role="checkbox" aria-checked="false">
+            <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
+            <span class="check-row__t"><b>完成一件 10 分钟内的小事</b><small>洗衣服、回一条消息、交一份作业</small></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">最小的一步</h2><button class="link-btn" data-action="shuffle-step">换一个</button></div>
+        <div class="chips" id="step-chips">
+          <button class="chip is-on" data-step-cat="身体">身体</button>
+          <button class="chip" data-step-cat="连接">连接</button>
+          <button class="chip" data-step-cat="推进">推进</button>
+          <button class="chip" data-step-cat="离开屏幕">离开屏幕</button>
+        </div>
+        <p class="one-thing__text mt-16" id="step-text">站起来，接一杯水，慢慢喝完。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">5 分钟启动</h2><span class="badge">先做，不等想做</span></div>
+        <p class="small muted">选一件拖着的小事，只做 5 分钟。时间到了可以停。</p>
+        <div class="timer-line mt-16">
+          <span class="timer-big" id="today-timer">05:00</span>
+          <span class="timer-bar"><span id="today-bar"></span></span>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary btn--sm" data-action="timer-start">开始</button>
+          <button class="btn btn--ghost btn--sm" data-action="timer-reset">归零</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">睡前 3 行</h2><span class="badge">给今天收尾</span></div>
+        <p class="small muted mb-16">写下来是为了让大脑知道：今天结束了。不需要总结人生。躺下 20 分钟还睡不着，就起来做点无聊的事，困了再回床上。</p>
+        <div class="sleep-grid">
+          <div class="field"><label for="sleep-fact">今天发生了什么（事实）</label><textarea id="sleep-fact" placeholder="只写事实，不写评价"></textarea></div>
+          <div class="field"><label for="sleep-did">我今天做到了什么</label><textarea id="sleep-did" placeholder="再小也算"></textarea></div>
+          <div class="field"><label for="sleep-tomorrow">明天最小的一件</label><textarea id="sleep-tomorrow" placeholder="一件，10 分钟内"></textarea></div>
+        </div>
+        <div class="actions-row mb-0">
+          <button class="btn btn--primary btn--sm" data-action="save-sleep">收工</button>
+          <span class="small muted" id="sleep-last"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">最近 7 天</h2><span class="badge">每天做到几件</span></div>
+        <div class="week" id="week"></div>
+      </div>
+    </section>
+
+    <!-- ============ 更多 ============ -->
+    <section class="view" data-view="more">
+      <header class="view-head">
+        <p class="eyebrow">更多</p>
+        <h1 class="h1">记录、卡片<br>和一些设置。</h1>
+        <p class="lede">这里的东西不需要一次看完。焦虑的时候，只读一页就够。</p>
+      </header>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">我的记录</h2><span class="badge">只在本机</span></div>
+        <div class="tabs" role="tablist" aria-label="记录类型">
+          <button class="tab is-on" data-rec-tab="rum" role="tab" aria-selected="true">反刍</button>
+          <button class="tab" data-rec-tab="cert" role="tab" aria-selected="false">确定性</button>
+          <button class="tab" data-rec-tab="tr" role="tab" aria-selected="false">思维记录</button>
+          <button class="tab" data-rec-tab="sleep" role="tab" aria-selected="false">睡前</button>
+          <button class="tab" data-rec-tab="sos" role="tab" aria-selected="false">着陆</button>
+        </div>
+        <div class="tab-panel is-on" data-rec-panel="rum"><ul class="list" id="rec-rum"></ul></div>
+        <div class="tab-panel" data-rec-panel="cert"><ul class="list" id="rec-cert"></ul></div>
+        <div class="tab-panel" data-rec-panel="tr"><ul class="list" id="rec-tr"></ul></div>
+        <div class="tab-panel" data-rec-panel="sleep"><ul class="list" id="rec-sleep"></ul></div>
+        <div class="tab-panel" data-rec-panel="sos"><ul class="list" id="rec-sos"></ul></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">思维记录</h2><span class="badge">CBT · 慢一点做</span></div>
+        <p class="small muted mb-16">当一句话反复出现、你又很确定它是真的，用它。把“想法”和“证据”分开。</p>
+        <div class="field"><label for="tr-situation">1 · 情境</label><textarea id="tr-situation" placeholder="什么时候、在哪里、发生了什么（只写事实）"></textarea></div>
+        <div class="field"><label for="tr-thought">2 · 自动思维</label><textarea id="tr-thought" placeholder="脑子里冒出的那句话"></textarea></div>
+        <div class="field"><label for="tr-belief">3 · 你当时有多相信它？</label>
+          <input class="range" type="range" id="tr-belief" min="0" max="100" value="80" step="5" aria-label="相信程度">
+          <div class="range-scale"><span>0 完全不信</span><span id="tr-belief-num">80%</span><span>100 完全相信</span></div>
+        </div>
+        <div class="support-row">
+          <div class="field"><label for="tr-emotion">4 · 情绪</label><input type="text" id="tr-emotion" placeholder="例：羞耻、慌"></div>
+          <div class="field"><label for="tr-intensity">强度 0–100</label><input class="range" type="range" id="tr-intensity" min="0" max="100" value="70" step="5" aria-label="情绪强度"><div class="range-scale"><span>0</span><span id="tr-intensity-num">70</span><span>100</span></div></div>
+        </div>
+        <div class="field"><label for="tr-for">5 · 支持它的证据（只写事实）</label><textarea id="tr-for"></textarea></div>
+        <div class="field"><label for="tr-against">6 · 反对它的证据（再小也写）</label><textarea id="tr-against"></textarea></div>
+        <div class="field"><label for="tr-balanced">7 · 更平衡的一句话</label><textarea id="tr-balanced" placeholder="不是安慰，是把两边都算进去的说法"></textarea></div>
+        <div class="field"><label for="tr-after">8 · 现在强度 0–100</label><input class="range" type="range" id="tr-after" min="0" max="100" value="60" step="5" aria-label="之后强度"><div class="range-scale"><span>0</span><span id="tr-after-num">60</span><span>100</span></div></div>
+        <div class="actions-row mb-0"><button class="btn btn--primary" data-action="save-tr">存下这条</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">读懂这一刻</h2><span class="badge">10 张卡</span></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">01</span>被拒绝为什么这么疼<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>被拒绝激活的不只是“没戏了”，还包括社会性的痛（被排除会带来真实的痛感）、自我价值的威胁（“是不是我不够好”）、以及失控感（“我的努力没有用”）。三样叠在一起，疼得超出预期是正常的。</p><p>它更像一次急性应激反应，而不是一次“客观评分”。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">02</span>反刍不是思考<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>反刍是重复、被动、聚焦在“为什么”和“我哪里不好”上的思维；解决问题是具体的、有步骤、有终点的。反刍让你感觉在努力，但它不产出任何可执行的东西。</p><p>一个检查方法：想完之后，我多了一条能做的事吗？没有，那就是反刍。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">03</span>为什么“求确定”越求越焦虑<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>每一次求证（反复看聊天记录、问朋友“对方到底什么意思”、猜对方的动态），都会短暂降低焦虑，然后让下一次更想求证。短期有效，长期把不确定性训练得更可怕。</p><p>更稳的做法不是“想出一个确定答案”，而是练习在不确定里待着，同时把生活往前推一点。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">04</span>适应障碍是什么<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>适应障碍指在明确的压力事件之后（通常在 3 个月内），出现明显的情绪或行为反应，比如焦虑、低落、失眠、注意力下降、回避，并且影响到日常功能。它不是你“性格不行”，而是应激系统还没缓过来。</p><p>如果这是医生给你的诊断，这个工作台只做日常辅助，治疗计划请跟医生或咨询师走。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">05</span>焦虑发作时，身体在做什么<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>心跳加快、呼吸变浅、手抖、出汗、胃里翻、脑子空白——这些是交感神经在把身体调成“应对危险”的状态。它很难受，但本身通常不会伤害你。</p><p>延长呼气、把注意力放到脚底和手心的触感，能让这套反应慢慢退下去。如果出现胸痛、晕厥、持续心悸，仍然要先看医生排除身体问题。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">06</span>恢复不是直线<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>好几天、突然又崩一晚、再好几天——这是恢复的常态，不是倒退，也不是“之前的努力白费了”。</p><p>看趋势，不看单日。一周里着陆次数变少、强度峰值变低，就是进展。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">07</span>想联系对方的时候<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>先把想说的话写下来，不发送。等 24 小时再看一遍。区分两件事：我是想对方，还是想用对方的回应来缓解现在的焦虑？后者通常撑不过一晚。</p><p>如果 24 小时后还想发，再发也不迟。通常不会因为迟一天就失去什么，但深夜发出去的话往往收不回来。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">08</span>现在先别做的五件事<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>一，反复翻聊天记录找线索；二，反复看对方的动态；三，找不同的人一遍遍求证；四，深夜喝酒后做决定；五，用“马上开始一段新关系”来证明自己没事。</p><p>它们都能短暂止痛，但都会把反刍喂大。</p></div>
+        </details></div>
+        
+        <div class="acc"><details>
+          <summary><span class="acc-k">09</span>什么时候该找专业帮助<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>持续两周以上情绪低落或焦虑、睡眠明显受损、无法学习工作、回避越来越多，或者出现伤害自己的念头——请不要自己扛。心理科/精神科门诊、学校心理中心、心理咨询都可以。</p><p>认知行为取向（CBT，尤其是反刍聚焦 CBT）对反刍有实证支持；暴露与反应阻止常用于焦虑与强迫。是否需要药物，请由精神科医生评估。</p></div>
+        </details></div>
+        <div class="acc"><details>
+          <summary><span class="acc-k">10</span>关于“确定性”的一句实话<span class="acc-plus">+</span></summary>
+          <div class="acc-body"><p>你想要的确定性是“对方到底怎么想、以后会怎样”。这个确定性不存在，任何人给不了，包括对方本人——人的想法会变，未来的事没发生。</p><p>能确定的是：你现在很难受，这是有原因的；你可以做一个小动作；以及，这一刻不需要有答案。</p></div>
+        </details></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">支持网</h2><span class="badge">提前写好，难受时不用想</span></div>
+        <p class="small muted mb-16">写两个可以联系的人。真到难受的时候，不用组织语言，直接发下面那句。</p>
+        <div class="support-row">
+          <div class="field"><label for="support-name-1">可以联系的人 1</label><input type="text" id="support-name-1" placeholder="名字"></div>
+          <div class="field"><label for="support-name-2">可以联系的人 2</label><input type="text" id="support-name-2" placeholder="名字"></div>
+        </div>
+        <div class="script-box">可以只说一句：<b>“我现在有点难受，不用给建议，能陪我聊十分钟吗？”</b></div>
+        <div class="actions-row mb-0"><button class="btn btn--ghost btn--sm" data-action="save-support">保存</button><span class="small muted" id="support-saved"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">如果现在很危险</h2><span class="badge badge--clay">不用犹豫</span></div>
+        <div class="crisis-lines">
+          <div class="crisis-line"><b>12356</b><span>全国心理援助热线 · 各地接听</span></div>
+          <div class="crisis-line"><b>010-82951332</b><span>北京市心理援助热线 · 24 小时</span></div>
+          <div class="crisis-line"><b>120 / 110</b><span>有立即危险时</span></div>
+        </div>
+        <p class="small muted mt-12">如果身边有人，直接告诉对方：“我现在状态不好，能不能陪我一会儿。”这句话比解释有效。</p>
+        <p class="small muted mt-12">不在中国大陆？拨打当地紧急电话，或在 <a href="https://findahelpline.com" target="_blank" rel="noopener">findahelpline.com</a> 查找本地心理援助热线。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">数据与设置</h2></div>
+        <div class="data-actions">
+          <button class="btn btn--ghost btn--sm" data-action="export-json">导出 JSON</button>
+          <button class="btn btn--ghost btn--sm" data-action="export-md">导出 Markdown</button>
+          <button class="btn btn--ghost btn--sm" data-action="import-json">导入 JSON</button>
+          <button class="btn btn--ghost btn--sm" data-action="print-pocket">打印口袋卡</button>
+          <button class="btn btn--danger btn--sm" data-action="clear-all">清空所有数据</button>
+        </div>
+        <div class="divider"></div>
+        <div class="support-row">
+          <div class="field"><label for="setting-window">担忧窗口时间</label><input type="time" id="setting-window" value="19:30"></div>
+          <div class="field"><label for="setting-theme">主题</label>
+            <select id="setting-theme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+          </div>
+        </div>
+        <div class="field mb-0"><label for="setting-motion">动效</label>
+          <select id="setting-motion"><option value="auto">跟随系统</option><option value="reduce">减少动效</option></select>
+        </div>
+      </div>
+
+      <div class="card card--quiet">
+        <div class="card-head"><h2 class="h3">关于这个工具</h2></div>
+        <p class="small">着陆台是一个自助练习工具，不是医疗设备，也不替代心理咨询或精神科诊疗。里面的方法是认知行为取向（CBT）与接纳承诺取向（ACT）里常见的自助技术：情绪命名、延长呼气、5-4-3-2-1 接地、担忧推迟、行为激活、思维记录。</p>
+        <p class="small mt-12">适用场景：表白被拒、分手或断联、被重要的人拒绝或排除之后的反刍与焦虑；其中大部分练习也适用于一般的反刍和焦虑。它不是只给恋爱用的。</p>
+        <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。清除浏览器数据会一起清掉，重要内容建议导出备份。</p>
+        <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
+        <p class="small muted mt-12">开源版本 v1.0.0 · MIT 许可 · 2026-11</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-foot">
+    <span>着陆台 · 本地工作台 · 数据只在这台设备</span>
+    <span>不是医疗工具 · 开源 MIT · <a href="#/more">求助与热线</a> · 12356</span>
+  </footer>
+</div>
+
+<nav class="bottom-nav" aria-label="底部导航">
+  <div class="bottom-nav__inner">
+    <a class="bnav-item" href="#/now" data-route="now" aria-label="现在">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"></circle></svg><span>现在</span>
+    </a>
+    <a class="bnav-item" href="#/rumination" data-route="rumination" aria-label="反刍">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9a7 7 0 0 1 12-2.5"></path><path d="M17 3v4h-4"></path><path d="M19 15a7 7 0 0 1-12 2.5"></path><path d="M7 21v-4h4"></path></svg><span>反刍</span>
+    </a>
+    <a class="bnav-item" href="#/certainty" data-route="certainty" aria-label="确定性">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M12 4v16M4 12h16"></path></svg><span>确定性</span>
+    </a>
+    <a class="bnav-item" href="#/today" data-route="today" aria-label="今日">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path></svg><span>今日</span>
+    </a>
+    <a class="bnav-item" href="#/more" data-route="more" aria-label="更多">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"></path></svg><span>更多</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ============ 着陆浮层 ============ -->
+<div class="overlay" id="sos-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="sos-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="sos-kicker">着陆 · 1 / 4</span>
+        <div class="steps-dots" id="sos-dots" aria-hidden="true"><i class="is-on"></i><i></i><i></i><i></i></div>
+      </div>
+      <button class="panel__close" data-action="close-sos" aria-label="关闭着陆">×</button>
+    </div>
+    <div class="panel__body">
+
+      <section class="step is-on" data-sos-step="1">
+        <h2 class="h2" id="sos-title">先停一下。</h2>
+        <p class="lede">接下来的 60 秒，你不需要想明白任何事，也不需要做任何决定。只跟着做。</p>
+        <div class="intensity-wrap mt-24">
+          <div class="intensity-num" id="sos-before-num">7</div>
+          <div class="intensity-side">
+            <label class="small" for="sos-before">现在的不舒服，大概几分？</label>
+            <input class="range" type="range" id="sos-before" min="0" max="10" value="7" step="1" aria-label="开始前强度">
+            <div class="intensity-scale"><span>0 还好</span><span>10 快撑不住</span></div>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-start">开始 60 秒</button>
+          <button class="btn btn--ghost" data-action="sos-skip-breath">跳过，直接接地</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="2">
+        <p class="panel__kicker">呼吸 · 5 轮</p>
+        <h2 class="h2">跟着圆，吸气，呼气。</h2>
+        <div class="breathe">
+          <div class="breathe__stage is-idle" id="breathe-stage">
+            <span class="breathe__halo" aria-hidden="true"></span>
+            <span class="breathe__halo breathe__halo--2" aria-hidden="true"></span>
+            <span class="breathe__circle" aria-hidden="true"></span>
+            <span class="breathe__phase" id="breathe-phase" aria-live="polite">准备</span>
+          </div>
+          <div class="breathe__count" id="breathe-count">第 0 / 5 轮</div>
+          <div class="breathe__bar" aria-hidden="true"><span id="breathe-bar"></span></div>
+          <div class="breathe__hint">吸气 4 秒 · 停 2 秒 · 呼气 6 秒<br>如果头晕，恢复正常呼吸，直接点“跳过”。</div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--ghost" data-action="sos-skip-breath">跳过</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="3">
+        <p class="panel__kicker">接地 · 5-4-3-2-1</p>
+        <h2 class="h2">用身体，把注意力拿回来。</h2>
+        <p class="small muted">每找到一样点一下。找不到那么多也没关系，点到几算几。</p>
+        <div class="ground-list" id="ground-list">
+          <button class="ground-row" data-sense="see" data-total="5">
+            <span class="ground-row__sense">看</span>
+            <span class="ground-row__t"><b>5 样你能看见的东西</b><small>灯、杯子、窗外的树</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="touch" data-total="4">
+            <span class="ground-row__sense">摸</span>
+            <span class="ground-row__t"><b>4 样你能摸到的东西</b><small>桌面、衣角、椅背</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="hear" data-total="3">
+            <span class="ground-row__sense">听</span>
+            <span class="ground-row__t"><b>3 种你能听见的声音</b><small>空调、脚步、远处的车</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="smell" data-total="2">
+            <span class="ground-row__sense">闻</span>
+            <span class="ground-row__t"><b>2 种气味</b><small>空气、洗衣液、饭味</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i><i></i></span>
+          </button>
+          <button class="ground-row" data-sense="taste" data-total="1">
+            <span class="ground-row__sense">尝</span>
+            <span class="ground-row__t"><b>1 种味道</b><small>嘴里的、喝一口水</small></span>
+            <span class="ground-dots" aria-hidden="true"><i></i></span>
+          </button>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-next">下一步</button>
+          <button class="btn btn--ghost" data-action="sos-skip-ground">跳过</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="4">
+        <p class="panel__kicker">收尾</p>
+        <h2 class="h2">现在，再感觉一下。</h2>
+        <div class="intensity-wrap">
+          <div class="intensity-num" id="sos-after-num">5</div>
+          <div class="intensity-side">
+            <label class="small" for="sos-after">现在的不舒服，几分？</label>
+            <input class="range" type="range" id="sos-after" min="0" max="10" value="5" step="1" aria-label="之后强度">
+            <div class="intensity-scale"><span>0 还好</span><span>10 快撑不住</span></div>
+          </div>
+        </div>
+        <div class="field mt-24"><span class="label">此刻我需要（可多选）</span>
+          <div class="chips" id="sos-need">
+            <button class="chip" data-need="被抱一下">被抱一下</button>
+            <button class="chip" data-need="有人说说话">有人说说话</button>
+            <button class="chip" data-need="睡一觉">睡一觉</button>
+            <button class="chip" data-need="吃点东西">吃点东西</button>
+            <button class="chip" data-need="一个人待着">一个人待着</button>
+            <button class="chip" data-need="说不清">说不清</button>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="sos-finish">完成着陆</button>
+        </div>
+      </section>
+
+      <section class="step" data-sos-step="5">
+        <div class="done-mark">✓</div>
+        <h2 class="h2">着陆完成。</h2>
+        <p class="lede">你没有解决任何问题，也不需要。强度从 <b id="sos-delta-before">7</b> 到 <b id="sos-delta-after">5</b>。<span class="delta" id="sos-delta"></span></p>
+        <div class="answer-card mt-24"><p><b>接下来只做一件小事。</b>喝水、洗脸、站起来走十步，选一个。做完就可以停。</p></div>
+        <p class="small muted mt-16">如果现在有伤害自己的念头，请直接拨打 <b>12356</b>，或告诉身边的人。这不是打扰。</p>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="close-sos">回到工作台</button>
+          <button class="btn btn--ghost" data-action="sos-restart">再来一轮</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ 反刍拦截浮层 ============ -->
+<div class="overlay" id="intercept-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="it-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="it-kicker">反刍拦截 · 1 / 3</span>
+        <div class="steps-dots" id="it-dots" aria-hidden="true"><i class="is-on"></i><i></i><i></i></div>
+      </div>
+      <button class="panel__close" data-action="close-intercept" aria-label="关闭拦截">×</button>
+    </div>
+    <div class="panel__body">
+
+      <section class="step is-on" data-it-step="1">
+        <h2 class="h2" id="it-title">现在循环的是哪一句？</h2>
+        <p class="lede">不用完整、不用准确。写下最刺的那一句。</p>
+        <textarea id="it-thought" class="mt-16" placeholder="例：对方拒绝我，是不是说明我这个人不行"></textarea>
+        <div class="field mt-16"><span class="label">它主要是哪一种？</span>
+          <div class="kind-list" id="it-kinds">
+            <button class="kind-btn" data-kind="why"><span class="k-letter">?</span><span class="k-text"><b>为什么是我 / 为什么会这样</b><small>在找一个不会改变结果的解释</small></span></button>
+            <button class="kind-btn" data-kind="if"><span class="k-letter">→</span><span class="k-text"><b>如果……怎么办</b><small>提前演练没发生的坏结果</small></span></button>
+            <button class="kind-btn" data-kind="self"><span class="k-letter">·</span><span class="k-text"><b>是我不够好</b><small>把一次拒绝当成整个人的评分</small></span></button>
+            <button class="kind-btn" data-kind="her"><span class="k-letter">○</span><span class="k-text"><b>对方到底怎么想</b><small>猜一个无法验证的答案</small></span></button>
+            <button class="kind-btn" data-kind="other"><span class="k-letter">…</span><span class="k-text"><b>说不清，就是停不下来</b><small>先登记，不分类也可以</small></span></button>
+          </div>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="it-next">下一步</button>
+          <button class="btn btn--ghost" data-action="open-sos">先做 60 秒着陆</button>
+        </div>
+      </section>
+
+      <section class="step" data-it-step="2">
+        <p class="panel__kicker">把它放回纸面</p>
+        <h2 class="h2" id="it-answer-title"></h2>
+        <div class="answer-card" id="it-answer"></div>
+        <div class="field mt-16" id="it-action-field">
+          <label for="it-action" id="it-action-label">下一步我打算…</label>
+          <textarea id="it-action" placeholder="一句话就够，具体到 10 分钟内能做"></textarea>
+        </div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="it-save">存进盒子</button>
+          <button class="btn btn--ghost" data-action="it-back">返回修改</button>
+        </div>
+      </section>
+
+      <section class="step" data-it-step="3">
+        <div class="done-mark">↺</div>
+        <h2 class="h2">已经拿出来了。</h2>
+        <p class="lede" id="it-done-text"></p>
+        <div class="answer-card mt-24"><p><b>重复出现不是新证据。</b>同一个念头第 5 次来，它依然不是新信息。</p></div>
+        <div class="step-actions">
+          <button class="btn btn--primary" data-action="close-intercept">合上</button>
+          <button class="btn btn--ghost" data-action="open-sos">做 60 秒着陆</button>
+          <button class="btn btn--ghost" data-action="it-again">还有一句</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============ 打印口袋卡 ============ -->
+<div class="pocket print-only" id="pocket">
+  <div class="pocket__head"><b>着陆台 · 口袋卡</b><span>WHEN IT HITS</span></div>
+  <div class="pocket__cols">
+    <div>
+      <h4>先让身体下来（约 2 分钟）</h4>
+      <ol>
+        <li>呼气比吸气长：吸 4 秒，停 2 秒，呼 6 秒，做 5 轮。</li>
+        <li>5-4-3-2-1：看 5 样、摸 4 样、听 3 种、闻 2 种、尝 1 种。</li>
+        <li>把手放在桌面上，感觉接触面 10 秒。</li>
+      </ol>
+      <h4 style="margin-top:10px">现在只做一件</h4>
+      <ul>
+        <li>喝一口水 / 洗把脸 / 站起来走十步。</li>
+      </ul>
+    </div>
+    <div>
+      <h4>反刍来了，只做三步</h4>
+      <ol>
+        <li>写下那一句最刺的话，不展开。</li>
+        <li>问：想完之后，我多了一条能做的事吗？没有 = 反刍。</li>
+        <li>存进盒子，留到今天的担忧窗口（默认 19:30，15 分钟）。</li>
+      </ol>
+      <h4 style="margin-top:10px">三句实话</h4>
+      <ul>
+        <li>对方的想法不可知，再想也不会变可知。</li>
+        <li>被拒绝是匹配结果，不是价值评分。</li>
+        <li>能 100% 确定的是下一个动作。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="pocket__line"><span>数据只在本机 · 不是医疗工具</span><span class="pocket__crisis">12356 · 010-82951332 · 120/110</span></div>
+</div>
+
+<script>
+/* ============================================================
+   着陆台 · 交互逻辑 01
+   数据层 / 路由 / 现在页 / 反刍页 / 着陆浮层
+   ============================================================ */
+(function () {
+  'use strict';
+
+  var KEY = 'zhuolu.v1';
+  var ROUTES = ['now', 'rumination', 'certainty', 'today', 'more'];
+  var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+  var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', her: '猜对方的想法', other: '说不清' };
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function clamp(n, a, b) { n = Number(n); if (isNaN(n)) n = a; return Math.max(a, Math.min(b, n)); }
+  function dayKey(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function fmtDateFull(d) { d = d || new Date(); return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 星期' + WEEK[d.getDay()]; }
+  function fmtClock(ts) { var d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function fmtDayTime(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + fmtClock(ts); }
+  function fmtShortDate(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); }
+  function startOfDay(d) { d = d || new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+
+  /* ---------------- 状态 ---------------- */
+
+  function blank() {
+    return {
+      v: 1,
+      firstSeen: Date.now(),
+      sos: [],
+      rum: [],
+      cert: [],
+      tr: [],
+      sleep: [],
+      parked: [],
+      daily: {},
+      window: { time: '19:30', minutes: 15, openedAt: 0, closedDay: '' },
+      settings: { theme: 'auto', motion: 'auto', support: ['', ''] }
+    };
+  }
+
+  var storageOK = true;
+
+  function normalize(raw) {
+    var b = blank();
+    if (!raw || typeof raw !== 'object') return b;
+    ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
+      if (Array.isArray(raw[k])) b[k] = raw[k];
+    });
+    if (raw.daily && typeof raw.daily === 'object') b.daily = raw.daily;
+    if (raw.window && typeof raw.window === 'object') {
+      b.window.time = raw.window.time || '19:30';
+      b.window.minutes = clamp(raw.window.minutes || 15, 5, 60);
+      b.window.openedAt = Number(raw.window.openedAt) || 0;
+      b.window.closedDay = raw.window.closedDay || '';
+    }
+    if (raw.settings && typeof raw.settings === 'object') {
+      b.settings.theme = raw.settings.theme === 'dark' || raw.settings.theme === 'light' ? raw.settings.theme : 'auto';
+      b.settings.motion = raw.settings.motion === 'reduce' ? 'reduce' : 'auto';
+      if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
+    }
+    if (raw.firstSeen) b.firstSeen = Number(raw.firstSeen) || Date.now();
+    return b;
+  }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return blank();
+      return normalize(JSON.parse(raw));
+    } catch (e) {
+      storageOK = false;
+      return blank();
+    }
+  }
+
+  function save() {
+    if (!storageOK) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {
+      storageOK = false;
+      try { showToast('浏览器没能保存，建议导出备份。'); } catch (err) { /* ignore */ }
+    }
+  }
+
+  var state = load();
+
+  /* ---------------- 主题 / 动效 ---------------- */
+
+  var mqDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+  function applyTheme() {
+    var t = state.settings.theme || 'auto';
+    var dark = t === 'dark' || (t === 'auto' && mqDark && mqDark.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    var m = state.settings.motion || 'auto';
+    var reduce = m === 'reduce' || (m === 'auto' && mqReduce && mqReduce.matches);
+    document.documentElement.setAttribute('data-motion', reduce ? 'reduce' : 'full');
+  }
+
+  if (mqDark && mqDark.addEventListener) mqDark.addEventListener('change', applyTheme);
+  if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', applyTheme);
+
+  /* ---------------- 提示 ---------------- */
+
+  var toastTimer = null;
+  function showToast(msg) {
+    var el = $('#toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('is-on');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 2600);
+  }
+
+  /* ---------------- 路由 ---------------- */
+
+  function currentRoute() {
+    var h = String(location.hash || '').replace(/^#\/?/, '');
+    return ROUTES.indexOf(h) >= 0 ? h : 'now';
+  }
+
+  function renderRoute() {
+    var route = currentRoute();
+    $$('.view').forEach(function (v) {
+      v.classList.toggle('is-active', v.getAttribute('data-view') === route);
+    });
+    $$('.nav-item, .bnav-item').forEach(function (a) {
+      a.classList.toggle('is-on', a.getAttribute('data-route') === route);
+    });
+    renderAll();
+  }
+
+  function go(route) {
+    if (ROUTES.indexOf(route) < 0) route = 'now';
+    if (currentRoute() === route) {
+      renderRoute();
+      return;
+    }
+    location.hash = '#/' + route;
+  }
+
+  window.addEventListener('hashchange', function () {
+    window.scrollTo(0, 0);
+    renderRoute();
+  });
+
+  /* ---------------- 现在页 ---------------- */
+
+  var TINY = [
+    '把手机翻过去，屏幕朝下。',
+    '站起来，接一杯水，慢慢喝完。',
+    '去洗把脸，用凉一点的水。',
+    '打开窗，站一分钟，只感觉空气。',
+    '把桌面上的三样东西放回原位。',
+    '走到门口，再走回来。',
+    '给自己泡一杯热的，双手握住。',
+    '把明天要穿的衣服拿出来。',
+    '删掉一个不再需要的提醒。',
+    '给一个人发一句：在干嘛。',
+    '把房间的灯调暗一点。',
+    '坐着，脚掌贴地，感觉十秒。'
+  ];
+  var lastTiny = 0;
+
+  function pickTiny() {
+    var i = Math.floor(Math.random() * TINY.length);
+    if (TINY.length > 1 && i === lastTiny) i = (i + 1) % TINY.length;
+    lastTiny = i;
+    var el = $('#one-thing');
+    if (el) el.textContent = TINY[i];
+  }
+
+  function weekStats() {
+    var since = Date.now() - 7 * 86400000;
+    var sos = state.sos.filter(function (e) { return e.t >= since; });
+    var rum = state.rum.filter(function (e) { return e.t >= since; });
+    var total = 0, n = 0;
+    sos.forEach(function (e) {
+      if (typeof e.before === 'number' && typeof e.after === 'number') { total += (e.before - e.after); n++; }
+    });
+    return { sos: sos.length, rum: rum.length, drop: n ? total / n : 0, n: n };
+  }
+
+  function activityDays() {
+    var set = {};
+    function mark(ts) { if (ts) set[dayKey(new Date(ts))] = true; }
+    state.sos.forEach(function (e) { mark(e.t); });
+    state.rum.forEach(function (e) { mark(e.t); });
+    state.cert.forEach(function (e) { mark(e.t); });
+    state.tr.forEach(function (e) { mark(e.t); });
+    state.sleep.forEach(function (e) { mark(e.t); });
+    Object.keys(state.daily).forEach(function (k) {
+      var d = state.daily[k];
+      if (d && (d.sleep || d.eat || d.move || d.connect || d.push)) set[k] = true;
+    });
+    return set;
+  }
+
+  function streak() {
+    var set = activityDays();
+    var n = 0;
+    var d = new Date();
+    while (n < 365) {
+      if (!set[dayKey(d)]) break;
+      n++;
+      d = new Date(d.getTime() - 86400000);
+    }
+    return n;
+  }
+
+  function renderTopbar() {
+    var d = new Date();
+    var dayNo = Math.max(1, Math.floor((startOfDay(d) - startOfDay(new Date(state.firstSeen))) / 86400000) + 1);
+    var el = $('#topbar-date');
+    if (el) el.textContent = fmtDateFull(d) + ' · 使用第 ' + dayNo + ' 天';
+    var g = $('#greet');
+    if (g) {
+      var h = d.getHours();
+      var word = h < 5 ? '凌晨' : h < 9 ? '早上' : h < 12 ? '上午' : h < 14 ? '下午' : h < 18 ? '下午' : h < 23 ? '晚上' : '深夜';
+      g.textContent = word + '好 · 现在';
+    }
+  }
+
+  function renderHome() {
+    var st = weekStats();
+    var s = streak();
+    var parts = [];
+    if (st.sos) parts.push('<span><b>' + st.sos + '</b>次着陆（近 7 天）</span>');
+    if (st.rum) parts.push('<span><b>' + st.rum + '</b>次反刍登记</span>');
+    if (st.n >= 2) parts.push('<span>着陆后平均降 <b>' + st.drop.toFixed(1) + '</b> 分</span>');
+    if (s >= 2) parts.push('<span>连续记录 <b>' + s + '</b> 天</span>');
+    if (!parts.length) parts.push('<span>还没有记录。难受的时候，按上面那个大按钮就行。</span>');
+    var el = $('#home-stats');
+    if (el) el.innerHTML = parts.join('');
+
+    var w = windowInfo();
+    var hw = $('#home-window');
+    if (hw) {
+      if (!w.open && state.parked.length) {
+        hw.hidden = false;
+        hw.innerHTML = '<span>盒子里有 <b>' + state.parked.length + '</b> 个念头 · 担忧窗口 <b>' + (w.closedToday ? '明天 ' : '') + esc(state.window.time) + '</b> 打开</span>';
+      } else if (w.open) {
+        hw.hidden = false;
+        hw.innerHTML = '<span>担忧窗口开着 · 现在可以处理盒子里的念头</span>';
+      } else {
+        hw.hidden = true;
+      }
+    }
+  }
+
+  /* ---------------- 担忧窗口 ---------------- */
+
+  function windowMinutes() { return clamp(state.window.minutes || 15, 5, 60); }
+
+  function windowInfo() {
+    var now = Date.now();
+    var mins = windowMinutes();
+    var opened = Number(state.window.openedAt) || 0;
+    if (opened) {
+      var end = opened + mins * 60000;
+      if (now < end) return { open: true, end: end, total: mins * 60000, start: opened };
+      state.window.openedAt = 0;
+      save();
+    }
+    var parts = String(state.window.time || '19:30').split(':');
+    var d = new Date();
+    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), clamp(parts[0] || 19, 0, 23), clamp(parts[1] || 30, 0, 59), 0, 0).getTime();
+    var end2 = start + mins * 60000;
+    var closedToday = state.window.closedDay === dayKey();
+    if (!closedToday && now >= start && now < end2) return { open: true, end: end2, total: mins * 60000, start: start, scheduled: true };
+    var next = now < start ? start : start + 86400000;
+    if (closedToday) next = start + 86400000;
+    return { open: false, next: next, closedToday: closedToday };
+  }
+
+  var lastWindowOpen = null;
+
+  function updateWindowTimer() {
+    var w = windowInfo();
+    if (lastWindowOpen !== null && lastWindowOpen !== !!w.open) {
+      lastWindowOpen = !!w.open;
+      renderWindow();
+      return;
+    }
+    lastWindowOpen = !!w.open;
+    var timer = $('#window-timer');
+    if (!timer) return;
+    if (!w.open) {
+      timer.hidden = true;
+      return;
+    }
+    timer.hidden = false;
+    var left = Math.max(0, w.end - Date.now());
+    var mm = Math.floor(left / 60000);
+    var ss = Math.floor((left % 60000) / 1000);
+    var cd = $('#window-countdown');
+    if (cd) cd.textContent = pad(mm) + ':' + pad(ss);
+    var bar = $('#window-bar');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, left / w.total * 100)) + '%';
+    if (left <= 0) {
+      state.window.openedAt = 0;
+      save();
+      renderWindow();
+    }
+  }
+
+  function parkedItemHtml(p, canDelete) {
+    return '<li class="item"><div class="item__main"><div class="item__text">' + esc(p.text) + '</div>' +
+      '<div class="item__meta">' + fmtClock(p.t) + ' 存入</div></div>' +
+      (canDelete ? '<button class="icon-btn" data-action="del-parked" data-id="' + esc(p.id) + '" aria-label="删除这个念头">×</button>' : '') +
+      '</li>';
+  }
+
+  function renderWindow() {
+    var w = windowInfo();
+    var mins = windowMinutes();
+    var timeEl = $('#window-time');
+    if (timeEl) timeEl.textContent = state.window.time;
+    var input = $('#window-time-input');
+    if (input) input.value = state.window.time;
+
+    var timer = $('#window-timer');
+    if (timer) timer.hidden = !w.open;
+    var openBtn = $('#window-open-btn');
+    if (openBtn) openBtn.hidden = !!w.open;
+    var closeBtn = $('#window-close-btn');
+    if (closeBtn) closeBtn.hidden = !w.open;
+    var list = $('#parked-list');
+    if (list) list.hidden = !w.open;
+
+    var status = $('#window-status');
+    if (status) {
+      if (w.open) {
+        status.innerHTML = '<span class="window-state">窗口开着</span> · 处理盒子里的念头，到点就关。一次只处理一件。';
+      } else {
+        if (w.closedToday) {
+          status.innerHTML = '<span class="window-state is-closed">今天已关</span> · 剩下的明天 <b>' + esc(state.window.time) + '</b> 再说。现在想到的，存进盒子。';
+        } else {
+          var nextTxt = fmtClock(w.next);
+          status.innerHTML = '<span class="window-state is-closed">未到时间</span> · 现在想到的念头，先存进盒子，<b>' + nextTxt + '</b> 再打开。';
+        }
+      }
+    }
+
+    var listEl = $('#parked-list');
+    if (listEl) {
+      listEl.innerHTML = w.open
+        ? (state.parked.length ? state.parked.map(function (p) { return parkedItemHtml(p, true); }).join('') : '<li class="empty">盒子里是空的。</li>')
+        : '';
+    }
+
+    var hint = $('#parked-hint');
+    if (hint) {
+      if (w.open) {
+        hint.textContent = state.parked.length ? '处理完一个就删掉一个。处理不了也没关系，明天再说。' : '有念头就写进来。现在只处理，不展开。';
+      } else {
+        var when = w.closedToday ? '明天 ' + state.window.time : state.window.time;
+        hint.textContent = state.parked.length
+          ? '盒子里有 ' + state.parked.length + ' 个念头，' + when + ' 再打开。'
+          : '想到什么，先存进来。' + (w.closedToday ? '明天 ' + state.window.time + ' 再一起看。' : '到点再一起看。');
+      }
+    }
+    updateWindowTimer();
+  }
+
+  function openWindow() {
+    var w = windowInfo();
+    if (w.open) { showToast('窗口已经开着。'); return; }
+    state.window.openedAt = Date.now();
+    state.window.closedDay = '';
+    save();
+    renderWindow();
+    renderHome();
+    showToast('窗口开着，' + windowMinutes() + ' 分钟。到点自动关。');
+  }
+
+  function closeWindow() {
+    var w = windowInfo();
+    state.window.openedAt = 0;
+    state.window.closedDay = w.scheduled ? dayKey() : '';
+    save();
+    renderWindow();
+    renderHome();
+    showToast('窗口已关。剩下的，明天再说。');
+  }
+
+  function ensureParkForm() {
+    var form = $('#park-form');
+    if (form) return form;
+    var host = $('.window-card') || $('#window-card');
+    if (!host) return null;
+    form = document.createElement('div');
+    form.id = 'park-form';
+    form.className = 'park-form';
+    form.hidden = true;
+    form.innerHTML = '<textarea id="park-text" placeholder="把念头压成一句。只存，不展开。"></textarea>' +
+      '<div class="step-actions"><button class="btn btn--primary btn--sm" data-action="save-park">存进盒子</button>' +
+      '<button class="btn btn--ghost btn--sm" data-action="cancel-park">取消</button></div>';
+    host.appendChild(form);
+    return form;
+  }
+
+  function toggleParkForm(show) {
+    var form = ensureParkForm();
+    if (!form) return;
+    form.hidden = !show;
+    if (show) {
+      var ta = $('#park-text');
+      if (ta) { ta.value = ''; setTimeout(function () { ta.focus(); }, 30); }
+    }
+  }
+
+  function savePark() {
+    var ta = $('#park-text');
+    var text = ta ? ta.value.trim() : '';
+    if (!text) { showToast('写一句再存。'); return; }
+    state.parked.unshift({ id: uid(), t: Date.now(), text: text });
+    save();
+    toggleParkForm(false);
+    renderWindow();
+    renderHome();
+    showToast('已放进盒子。到窗口时间再看。');
+  }
+
+  function renderRum() {
+    var today = dayKey();
+    var count = state.rum.filter(function (r) { return dayKey(new Date(r.t)) === today; }).length;
+    var badge = $('#rum-count');
+    if (badge) badge.textContent = '今天 ' + count + ' 次';
+    var list = $('#rum-list');
+    if (!list) return;
+    var items = state.rum.slice(0, 8);
+    if (!items.length) {
+      list.innerHTML = '<li class="empty">还没有登记。反刍来的时候，点上面的按钮。</li>';
+      return;
+    }
+    list.innerHTML = items.map(function (r) {
+      return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没有写内容）') + '</div>' +
+        '<div class="item__meta">' + KIND_LABEL[r.kind] + ' · ' + fmtDayTime(r.t) + '</div></div></li>';
+    }).join('');
+  }
+
+  /* ---------------- 着陆浮层 ---------------- */
+
+  var sos = {
+    step: 1,
+    before: 7,
+    after: 5,
+    need: [],
+    timer: null,
+    startedAt: 0,
+    lastPhase: '',
+    ground: { see: 0, touch: 0, hear: 0, smell: 0, taste: 0 }
+  };
+
+  var lastFocus = null;
+
+  function openOverlay(id) {
+    lastFocus = document.activeElement;
+    var o = $(id);
+    if (!o) return;
+    o.hidden = false;
+    document.body.classList.add('is-locked');
+    var c = $('.panel__close', o);
+    if (c) setTimeout(function () { c.focus(); }, 40);
+  }
+
+  function closeOverlay(id) {
+    var o = $(id);
+    if (!o) return;
+    o.hidden = true;
+    if (!$('#sos-overlay') || $('#sos-overlay').hidden) {
+      if (!$('#intercept-overlay') || $('#intercept-overlay').hidden) document.body.classList.remove('is-locked');
+    }
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* ignore */ } }
+  }
+
+  function showSOSStep(n) {
+    sos.step = n;
+    var overlay = $('#sos-overlay');
+    if (!overlay) return;
+    $$('[data-sos-step]', overlay).forEach(function (s) {
+      s.classList.toggle('is-on', Number(s.getAttribute('data-sos-step')) === n);
+    });
+    var kicker = $('#sos-kicker');
+    if (kicker) {
+      var stage = n <= 1 ? 1 : n === 2 ? 2 : n === 3 ? 3 : 4;
+      kicker.textContent = '着陆 · ' + stage + ' / 4';
+    }
+    var dots = $$('#sos-dots i');
+    dots.forEach(function (dot, i) {
+      dot.classList.toggle('is-on', i === Math.min(3, n - 1));
+      dot.classList.toggle('is-done', i < Math.min(4, n - 1));
+    });
+  }
+
+  function resetBreathingUI() {
+    var stage = $('#breathe-stage');
+    if (stage) stage.className = 'breathe__stage is-idle';
+    var phase = $('#breathe-phase');
+    if (phase) phase.textContent = '准备';
+    var count = $('#breathe-count');
+    if (count) count.textContent = '第 0 / 5 轮';
+    var bar = $('#breathe-bar');
+    if (bar) bar.style.width = '0%';
+    sos.lastPhase = '';
+  }
+
+  function stopBreathing() {
+    if (sos.timer) { clearInterval(sos.timer); sos.timer = null; }
+  }
+
+  function finishBreathing() {
+    stopBreathing();
+    var bar = $('#breathe-bar');
+    if (bar) bar.style.width = '100%';
+    var phase = $('#breathe-phase');
+    if (phase) phase.textContent = '完成';
+    var stage = $('#breathe-stage');
+    if (stage) stage.className = 'breathe__stage is-idle';
+    sos.step = 3;
+    setTimeout(function () { showSOSStep(3); }, 420);
+  }
+
+  function tickBreathing() {
+    var elapsed = (Date.now() - sos.startedAt) / 1000;
+    if (elapsed >= 60) { finishBreathing(); return; }
+    var cycle = Math.floor(elapsed / 12);
+    var within = elapsed - cycle * 12;
+    var phase, label;
+    if (within < 4) { phase = 'in'; label = '吸气'; }
+    else if (within < 6) { phase = 'hold'; label = '停'; }
+    else { phase = 'out'; label = '呼气'; }
+    if (sos.lastPhase !== phase) {
+      sos.lastPhase = phase;
+      var stage = $('#breathe-stage');
+      if (stage) stage.className = 'breathe__stage is-' + phase;
+      var ph = $('#breathe-phase');
+      if (ph) ph.textContent = label;
+    }
+    var count = $('#breathe-count');
+    if (count) count.textContent = '第 ' + (cycle + 1) + ' / 5 轮';
+    var bar = $('#breathe-bar');
+    if (bar) bar.style.width = Math.min(100, elapsed / 60 * 100) + '%';
+  }
+
+  function startBreathing() {
+    stopBreathing();
+    sos.startedAt = Date.now();
+    sos.lastPhase = '';
+    resetBreathingUI();
+    tickBreathing();
+    sos.timer = setInterval(tickBreathing, 200);
+  }
+
+  function resetGround() {
+    sos.ground = { see: 0, touch: 0, hear: 0, smell: 0, taste: 0 };
+    $$('#ground-list .ground-row').forEach(function (row) {
+      row.classList.remove('is-done');
+      $$('.ground-dots i', row).forEach(function (d) { d.classList.remove('is-on'); });
+    });
+  }
+
+  function resetSOS() {
+    stopBreathing();
+    sos.before = 7;
+    sos.after = 5;
+    sos.need = [];
+    sos.lastPhase = '';
+    var before = $('#sos-before');
+    if (before) before.value = '7';
+    var beforeNum = $('#sos-before-num');
+    if (beforeNum) beforeNum.textContent = '7';
+    var after = $('#sos-after');
+    if (after) after.value = '5';
+    var afterNum = $('#sos-after-num');
+    if (afterNum) afterNum.textContent = '5';
+    $$('#sos-need .chip').forEach(function (c) { c.classList.remove('is-on'); });
+    resetBreathingUI();
+    resetGround();
+  }
+
+  function openSOS() {
+    if (!$('#intercept-overlay').hidden) closeOverlay('#intercept-overlay');
+    resetSOS();
+    openOverlay('#sos-overlay');
+    showSOSStep(1);
+  }
+
+  function closeSOS() {
+    stopBreathing();
+    closeOverlay('#sos-overlay');
+    renderAll();
+  }
+
+  function sosStart() {
+    var before = $('#sos-before');
+    sos.before = before ? Number(before.value) : 7;
+    var beforeNum = $('#sos-before-num');
+    if (beforeNum) beforeNum.textContent = String(sos.before);
+    showSOSStep(2);
+    startBreathing();
+  }
+
+  function sosSkipBreath() {
+    stopBreathing();
+    showSOSStep(3);
+  }
+
+  function sosToAfter() {
+    stopBreathing();
+    var after = $('#sos-after');
+    sos.after = after ? Number(after.value) : 5;
+    showSOSStep(4);
+  }
+
+  function sosFinish() {
+    var after = $('#sos-after');
+    sos.after = after ? Number(after.value) : 5;
+    var afterNum = $('#sos-after-num');
+    if (afterNum) afterNum.textContent = String(sos.after);
+    var need = [];
+    $$('#sos-need .chip').forEach(function (c) { if (c.classList.contains('is-on')) need.push(c.getAttribute('data-need')); });
+    sos.need = need;
+    state.sos.unshift({ id: uid(), t: Date.now(), before: sos.before, after: sos.after, need: need });
+    save();
+    renderAll();
+    var b = $('#sos-delta-before');
+    var a = $('#sos-delta-after');
+    if (b) b.textContent = String(sos.before);
+    if (a) a.textContent = String(sos.after);
+    var d = sos.before - sos.after;
+    var delta = $('#sos-delta');
+    if (delta) {
+      delta.textContent = d > 0 ? '降了 ' + d + ' 分' : d === 0 ? '没有变化，也正常' : '反而升了 ' + Math.abs(d) + ' 分';
+      delta.className = 'delta' + (d < 0 ? ' is-up' : '');
+    }
+    showSOSStep(5);
+  }
+
+  function sosRestart() {
+    resetSOS();
+    showSOSStep(1);
+  }
+
+  /* ---------------- 反刍拦截 ---------------- */
+
+  var IT_ANSWERS = {
+    why: {
+      title: '“为什么”没有出口，只有下一步。',
+      html: '<p>你在找一个解释：为什么被拒绝、为什么是我。但就算找到原因，结果也不会改变。反刍会把“找一个解释”伪装成“解决问题”。</p><p>把它换成一句具体的：<span class="em">下次我会……</span> 只写一条，写完就停。</p>',
+      label: '下次我会…（只写一条）',
+      ph: '例：下次我会更早表达，不憋到最后一刻。'
+    },
+    if: {
+      title: '你在提前演练一个还没发生的结果。',
+      html: '<p>“如果……怎么办”的答案不能靠想出来，只能靠预案。现在只写一次应对，不要推演第二层。</p><p>写下最坏情况和你打算怎么应对，各一句。写完，今天就不用再算了。</p>',
+      label: '最坏会怎样 / 我会怎么应对',
+      ph: '例：最坏是彻底不联系；我会先找朋友吃顿饭，然后继续上课。'
+    },
+    self: {
+      title: '一次拒绝，不是对你整个人的评分。',
+      html: '<p>“是我不够好”把一次匹配结果升级成了全局评价。被拒绝通常只说明：此刻的需求、时机、偏好不匹配，不说明你的价值。</p><p>写三条和这段关系无关、但依然成立的事实。</p>',
+      label: '三条与这段关系无关的事实',
+      ph: '例：我上周帮舍友搬了东西；我能按时交作业；我做饭不难吃。'
+    },
+    her: {
+      title: '对方的想法在“不可知区”。',
+      html: '<p>对方真实的想法、拒绝的原因、以后会不会后悔——这些都无法验证。你可以猜，但猜不产生信息，只会产生更多猜测。</p><p>把它归到不可知区：不求解，只存放。写下要放进盒子的那句。</p>',
+      label: '要存进盒子的那句（可留空）',
+      ph: '例：对方到底有没有喜欢过我。'
+    },
+    other: {
+      title: '先承认它来过，不急着解释。',
+      html: '<p>有些反刍没有清晰的主题，只是脑子停不下来。这时候不需要分析，只需要给它一个落点。</p><p>写一句：我现在感觉到的是……不用解释为什么。</p>',
+      label: '我现在感觉到的是…',
+      ph: '例：胸口很紧，说不清的难受。'
+    }
+  };
+
+  var it = { step: 1, kind: '', thought: '', action: '' };
+
+  function showITStep(n) {
+    it.step = n;
+    var overlay = $('#intercept-overlay');
+    if (!overlay) return;
+    $$('[data-it-step]', overlay).forEach(function (s) {
+      s.classList.toggle('is-on', Number(s.getAttribute('data-it-step')) === n);
+    });
+    var kicker = $('#it-kicker');
+    if (kicker) kicker.textContent = '反刍拦截 · ' + n + ' / 3';
+    $$('#it-dots i').forEach(function (dot, i) {
+      dot.classList.toggle('is-on', i === Math.min(2, n - 1));
+      dot.classList.toggle('is-done', i < Math.min(3, n - 1));
+    });
+  }
+
+  function resetIntercept() {
+    it = { step: 1, kind: '', thought: '', action: '' };
+    var ta = $('#it-thought');
+    if (ta) ta.value = '';
+    var act = $('#it-action');
+    if (act) act.value = '';
+    $$('#it-kinds .kind-btn').forEach(function (b) { b.classList.remove('is-on'); });
+  }
+
+  function openIntercept() {
+    if (!$('#sos-overlay').hidden) closeOverlay('#sos-overlay');
+    resetIntercept();
+    openOverlay('#intercept-overlay');
+    showITStep(1);
+  }
+
+  function closeIntercept() {
+    closeOverlay('#intercept-overlay');
+    renderAll();
+  }
+
+  function itNext() {
+    var ta = $('#it-thought');
+    var text = ta ? ta.value.trim() : '';
+    if (!text) { showToast('写一句再继续。写不完整也可以。'); if (ta) ta.focus(); return; }
+    if (!it.kind) { showToast('先选一个类型，不做判断也可以选“说不清”。'); return; }
+    it.thought = text;
+    var a = IT_ANSWERS[it.kind] || IT_ANSWERS.other;
+    var title = $('#it-answer-title');
+    if (title) title.textContent = a.title;
+    var answer = $('#it-answer');
+    if (answer) answer.innerHTML = a.html;
+    var label = $('#it-action-label');
+    if (label) label.textContent = a.label;
+    var action = $('#it-action');
+    if (action) { action.value = ''; action.placeholder = a.ph; }
+    showITStep(2);
+  }
+
+  function itSave() {
+    var act = $('#it-action');
+    it.action = act ? act.value.trim() : '';
+    state.rum.unshift({ id: uid(), t: Date.now(), thought: it.thought, kind: it.kind, action: it.action });
+    save();
+    var today = dayKey();
+    var count = state.rum.filter(function (r) { return dayKey(new Date(r.t)) === today; }).length;
+    var done = $('#it-done-text');
+    if (done) {
+      var extra = it.kind === 'her' ? '它现在属于不可知区，先存放。' : '如果还想继续，把它留到担忧窗口。';
+      done.innerHTML = '今天它出现了第 <b>' + count + '</b> 次。' + extra +
+        (count >= 3 ? '<br><span class="muted">今天已经第 ' + count + ' 次了。重复出现不是新证据。</span>' : '');
+    }
+    renderAll();
+    showITStep(3);
+  }
+
+  /* ---------------- 确定性 ---------------- */
+
+  function certFields() {
+    return {
+      fact: ($('#cert-fact') || {}).value || '',
+      interp: ($('#cert-interp') || {}).value || '',
+      unknown: ($('#cert-unknown') || {}).value || '',
+      next: ($('#cert-next') || {}).value || ''
+    };
+  }
+
+  function clearCertFields() {
+    ['cert-fact', 'cert-interp', 'cert-unknown', 'cert-next'].forEach(function (id) {
+      var el = $('#' + id);
+      if (el) el.value = '';
+    });
+  }
+
+  function saveCert() {
+    var f = certFields();
+    var any = [f.fact, f.interp, f.unknown, f.next].some(function (v) { return String(v).trim(); });
+    if (!any) { showToast('至少写一格再存。'); return; }
+    state.cert.unshift({ id: uid(), t: Date.now(), fact: f.fact.trim(), interp: f.interp.trim(), unknown: f.unknown.trim(), next: f.next.trim() });
+    save();
+    clearCertFields();
+    renderAll();
+    showToast('已存下。下次再想不通，翻出来看这张。');
+  }
+
+  function certSummaryHtml(c) {
+    var rows = [
+      ['1', '事实', c.fact],
+      ['2', '解释', c.interp],
+      ['3', '不可知', c.unknown],
+      ['4', '下一步', c.next]
+    ];
+    var out = '';
+    rows.forEach(function (r) {
+      if (!r[2]) return;
+      var txt = String(r[2]).replace(/\s+/g, ' ').slice(0, 90);
+      if (String(r[2]).length > 90) txt += '…';
+      out += '<p class="cert-line"><span class="cert-k">' + r[0] + '</span><span class="cert-v">' + esc(txt) + '</span></p>';
+    });
+    return out;
+  }
+
+  function certItemsHtml(limit) {
+    var items = state.cert.slice(0, limit || 20);
+    if (!items.length) return '<li class="empty">还没有存过整理。第一次写，能写两格就算完成。</li>';
+    return items.map(function (c) {
+      return '<li class="item"><div class="item__main">' +
+        '<div class="item__meta">' + fmtDayTime(c.t) + '</div>' +
+        '<div class="cert-lines">' + certSummaryHtml(c) + '</div>' +
+        '</div><button class="icon-btn" data-action="del-cert" data-id="' + esc(c.id) + '" aria-label="删除这份整理">×</button></li>';
+    }).join('');
+  }
+
+  function renderCert() {
+    var list = $('#cert-list');
+    if (list) list.innerHTML = certItemsHtml(6);
+    var count = $('#cert-count');
+    if (count) count.textContent = state.cert.length + ' 份';
+  }
+
+  /* ---------------- 今日 ---------------- */
+
+  var CHECKS = ['sleep', 'eat', 'move', 'connect', 'push'];
+
+  var STEPS = {
+    '身体': ['站起来，接一杯水，慢慢喝完。', '走到楼下，呼吸三次，再回来。', '做十个深蹲，或者伸一个懒腰。', '洗把脸，用凉一点的水。', '躺下，把腿抬高两分钟。'],
+    '连接': ['给一个朋友发：在干嘛。', '和舍友说一句今天发生的事。', '给家里人发一条语音。', '问旁边的人一个具体的小问题。', '在常去的群里回一句。'],
+    '推进': ['打开作业，只写开头三行。', '把要洗的衣服放进洗衣机。', '回掉一条拖着的消息。', '列出明天要做的三件事，只列。', '整理桌面的一个角。'],
+    '离开屏幕': ['把手机放到另一个房间，待 5 分钟。', '关掉所有通知 10 分钟。', '出门走到楼下，不带耳机。', '看窗外 60 秒，只数车。', '把屏幕调成灰度，待一会儿。']
+  };
+  var stepCat = '身体';
+  var stepIdx = 0;
+
+  function todayData() {
+    var k = dayKey();
+    if (!state.daily[k] || typeof state.daily[k] !== 'object') state.daily[k] = { sleep: false, eat: false, move: false, connect: false, push: false };
+    var d = state.daily[k];
+    CHECKS.forEach(function (c) { if (typeof d[c] !== 'boolean') d[c] = false; });
+    return d;
+  }
+
+  function renderToday() {
+    var d = todayData();
+    $$('#today-checks .check-row').forEach(function (row) {
+      var on = !!d[row.getAttribute('data-check')];
+      row.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    var done = CHECKS.filter(function (c) { return d[c]; }).length;
+    var p = $('#today-progress');
+    if (p) p.textContent = done + ' / 5';
+    var week = $('#week');
+    if (week) {
+      var html = '';
+      for (var i = 6; i >= 0; i--) {
+        var dt = new Date(Date.now() - i * 86400000);
+        var k = dayKey(dt);
+        var dd = state.daily[k] || {};
+        var n = CHECKS.filter(function (c) { return dd[c]; }).length;
+        var cls = n >= 5 ? 'is-3' : n >= 3 ? 'is-2' : n >= 1 ? 'is-1' : '';
+        html += '<div class="week__day' + (i === 0 ? ' is-today' : '') + '">' +
+          '<div class="week__dot ' + cls + '" title="' + k + ' 做到 ' + n + ' 件">' + (n || '·') + '</div>' +
+          '<span>' + WEEK[dt.getDay()] + '</span></div>';
+      }
+      week.innerHTML = html;
+    }
+    var st = $('#step-text');
+    if (st) st.textContent = STEPS[stepCat][stepIdx];
+  }
+
+  function shuffleStep() {
+    var arr = STEPS[stepCat];
+    stepIdx = (stepIdx + 1 + Math.floor(Math.random() * (arr.length - 1))) % arr.length;
+    var st = $('#step-text');
+    if (st) st.textContent = arr[stepIdx];
+  }
+
+  /* ---------------- 5 分钟计时 ---------------- */
+
+  var timer = { remain: 300, running: false, id: null, end: 0 };
+
+  function renderTimer() {
+    var t = $('#today-timer');
+    if (t) t.textContent = pad(Math.floor(timer.remain / 60)) + ':' + pad(timer.remain % 60);
+    var bar = $('#today-bar');
+    if (bar) bar.style.width = Math.min(100, (1 - timer.remain / 300) * 100) + '%';
+    var btn = $('[data-action="timer-start"]');
+    if (btn) btn.textContent = timer.running ? '暂停' : '开始';
+  }
+
+  function stopTimer() {
+    if (timer.id) { clearInterval(timer.id); timer.id = null; }
+    timer.running = false;
+  }
+
+  function tickTimer() {
+    var left = Math.max(0, Math.ceil((timer.end - Date.now()) / 1000));
+    timer.remain = left;
+    renderTimer();
+    if (left <= 0) {
+      stopTimer();
+      showToast('5 分钟到了。可以停，也可以再来 5 分钟。');
+    }
+  }
+
+  function toggleTimer() {
+    if (timer.running) {
+      stopTimer();
+      renderTimer();
+      return;
+    }
+    if (timer.remain <= 0) timer.remain = 300;
+    timer.end = Date.now() + timer.remain * 1000;
+    timer.running = true;
+    timer.id = setInterval(tickTimer, 250);
+    renderTimer();
+  }
+
+  function resetTimer() {
+    stopTimer();
+    timer.remain = 300;
+    renderTimer();
+  }
+
+  /* ---------------- 睡前 3 行 ---------------- */
+
+  function saveSleep() {
+    var fact = ($('#sleep-fact') || {}).value || '';
+    var did = ($('#sleep-did') || {}).value || '';
+    var tomorrow = ($('#sleep-tomorrow') || {}).value || '';
+    if (!fact.trim() && !did.trim() && !tomorrow.trim()) { showToast('写一行也算。'); return; }
+    state.sleep.unshift({ id: uid(), t: Date.now(), fact: fact.trim(), did: did.trim(), tomorrow: tomorrow.trim() });
+    save();
+    ['sleep-fact', 'sleep-did', 'sleep-tomorrow'].forEach(function (id) { var el = $('#' + id); if (el) el.value = ''; });
+    renderSleepLast();
+    renderRecords();
+    showToast('今天收工了。');
+  }
+
+  function renderSleepLast() {
+    var el = $('#sleep-last');
+    if (!el) return;
+    if (!state.sleep.length) { el.textContent = ''; return; }
+    el.textContent = '上次收工：' + fmtDayTime(state.sleep[0].t);
+  }
+
+  /* ---------------- 记录 ---------------- */
+
+  function emptyItem(text) { return '<li class="empty">' + text + '</li>'; }
+
+  function recordsHtml() {
+    var rum = state.rum.slice(0, 40);
+    var cert = state.cert.slice(0, 20);
+    var tr = state.tr.slice(0, 20);
+    var sleep = state.sleep.slice(0, 20);
+    var sosList = state.sos.slice(0, 40);
+
+    var rumEl = $('#rec-rum');
+    if (rumEl) {
+      rumEl.innerHTML = rum.length ? rum.map(function (r) {
+        return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写内容）') + '</div>' +
+          (r.action ? '<div class="small muted">下一步：' + esc(r.action) + '</div>' : '') +
+          '<div class="item__meta">' + KIND_LABEL[r.kind] + ' · ' + fmtDayTime(r.t) + '</div></div></li>';
+      }).join('') : emptyItem('还没有反刍记录。');
+    }
+
+    var certEl = $('#rec-cert');
+    if (certEl) certEl.innerHTML = cert.length ? cert.map(function (c) {
+      return '<li class="item"><div class="item__main"><div class="item__meta">' + fmtDayTime(c.t) + '</div>' +
+        '<div class="cert-lines">' + certSummaryHtml(c) + '</div></div></li>';
+    }).join('') : emptyItem('还没有确定性整理。');
+
+    var trEl = $('#rec-tr');
+    if (trEl) {
+      trEl.innerHTML = tr.length ? tr.map(function (r) {
+        return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写自动思维）') + '</div>' +
+          '<div class="small muted">情境：' + esc((r.situation || '').slice(0, 60)) + '</div>' +
+          '<div class="item__meta">' + (r.intensity != null ? r.intensity : '?') + ' → ' + (r.after != null ? r.after : '?') + ' · ' + fmtDayTime(r.t) + '</div></div></li>';
+      }).join('') : emptyItem('还没有思维记录。');
+    }
+
+    var sleepEl = $('#rec-sleep');
+    if (sleepEl) {
+      sleepEl.innerHTML = sleep.length ? sleep.map(function (r) {
+        return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.did || r.fact || '（没写内容）') + '</div>' +
+          '<div class="small muted">' + esc(r.tomorrow ? '明天：' + r.tomorrow : '') + '</div>' +
+          '<div class="item__meta">' + fmtDayTime(r.t) + '</div></div></li>';
+      }).join('') : emptyItem('还没有睡前记录。');
+    }
+
+    var sosEl = $('#rec-sos');
+    if (sosEl) {
+      sosEl.innerHTML = sosList.length ? sosList.map(function (r) {
+        var d = (r.before != null && r.after != null) ? (r.before - r.after) : 0;
+        return '<li class="item"><div class="item__main"><div class="item__text">强度 ' + r.before + ' → ' + r.after + (d > 0 ? '（降 ' + d + '）' : '') + '</div>' +
+          '<div class="item__meta">' + (r.need && r.need.length ? esc(r.need.join('、')) + ' · ' : '') + fmtDayTime(r.t) + '</div></div></li>';
+      }).join('') : emptyItem('还没有着陆记录。');
+    }
+  }
+
+  /* ---------------- 思维记录 ---------------- */
+
+  function saveTR() {
+    function v(id) { var el = $('#' + id); return el ? el.value : ''; }
+    var thought = v('tr-thought').trim();
+    if (!thought) { showToast('至少写一句自动思维。'); var t = $('#tr-thought'); if (t) t.focus(); return; }
+    state.tr.unshift({
+      id: uid(), t: Date.now(),
+      situation: v('tr-situation').trim(),
+      thought: thought,
+      belief: Number(v('tr-belief')) || 0,
+      emotion: v('tr-emotion').trim(),
+      intensity: Number(v('tr-intensity')) || 0,
+      for: v('tr-for').trim(),
+      against: v('tr-against').trim(),
+      balanced: v('tr-balanced').trim(),
+      after: Number(v('tr-after')) || 0
+    });
+    save();
+    ['tr-situation', 'tr-thought', 'tr-emotion', 'tr-for', 'tr-against', 'tr-balanced'].forEach(function (id) { var el = $('#' + id); if (el) el.value = ''; });
+    renderRecords();
+    showToast('存下了。可以对比前后的强度。');
+  }
+
+  /* ---------------- 支持网 / 设置 ---------------- */
+
+  function renderSupport() {
+    var s = state.settings.support || ['', ''];
+    var a = $('#support-name-1');
+    var b = $('#support-name-2');
+    if (a) a.value = s[0] || '';
+    if (b) b.value = s[1] || '';
+  }
+
+  function saveSupport() {
+    state.settings.support = [
+      ($('#support-name-1') || {}).value || '',
+      ($('#support-name-2') || {}).value || ''
+    ];
+    save();
+    var el = $('#support-saved');
+    if (el) el.textContent = '已保存';
+    showToast('记下了。难受的时候直接发那句话。');
+  }
+
+  function renderSettings() {
+    var w = $('#setting-window');
+    if (w) w.value = state.window.time;
+    var th = $('#setting-theme');
+    if (th) th.value = state.settings.theme || 'auto';
+    var mo = $('#setting-motion');
+    if (mo) mo.value = state.settings.motion || 'auto';
+  }
+
+  /* ---------------- 导出 / 导入 / 清空 ---------------- */
+
+  function download(filename, text, mime) {
+    var blob = new Blob([text], { type: mime || 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); }, 800);
+  }
+
+  function exportJSON() {
+    download('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(state, null, 2));
+    showToast('已导出 JSON 备份。');
+  }
+
+  function exportMD() {
+    var lines = [];
+    lines.push('# 着陆台 · 记录导出');
+    lines.push('');
+    lines.push('导出时间：' + fmtDateFull(new Date()) + ' ' + fmtClock(Date.now()));
+    lines.push('');
+    lines.push('## 着陆记录（' + state.sos.length + '）');
+    state.sos.slice(0, 100).forEach(function (r) {
+      lines.push('- ' + fmtDayTime(r.t) + '：强度 ' + r.before + ' → ' + r.after + (r.need && r.need.length ? '；需要：' + r.need.join('、') : ''));
+    });
+    lines.push('');
+    lines.push('## 反刍登记（' + state.rum.length + '）');
+    state.rum.slice(0, 100).forEach(function (r) {
+      lines.push('- ' + fmtDayTime(r.t) + ' [' + KIND_LABEL[r.kind] + '] ' + r.thought + (r.action ? '；下一步：' + r.action : ''));
+    });
+    lines.push('');
+    lines.push('## 确定性整理（' + state.cert.length + '）');
+    state.cert.slice(0, 50).forEach(function (c) {
+      lines.push('- ' + fmtDayTime(c.t));
+      if (c.fact) lines.push('  - 事实：' + c.fact);
+      if (c.interp) lines.push('  - 解释：' + c.interp);
+      if (c.unknown) lines.push('  - 不可知：' + c.unknown);
+      if (c.next) lines.push('  - 下一步：' + c.next);
+    });
+    lines.push('');
+    lines.push('## 思维记录（' + state.tr.length + '）');
+    state.tr.slice(0, 50).forEach(function (r) {
+      lines.push('- ' + fmtDayTime(r.t) + '：' + r.thought + '（' + r.intensity + ' → ' + r.after + '）');
+      if (r.balanced) lines.push('  - 平衡句：' + r.balanced);
+    });
+    lines.push('');
+    lines.push('## 睡前 3 行（' + state.sleep.length + '）');
+    state.sleep.slice(0, 50).forEach(function (r) {
+      lines.push('- ' + fmtDayTime(r.t));
+      if (r.fact) lines.push('  - 事实：' + r.fact);
+      if (r.did) lines.push('  - 做到：' + r.did);
+      if (r.tomorrow) lines.push('  - 明天：' + r.tomorrow);
+    });
+    lines.push('');
+    lines.push('---');
+    lines.push('如果出现伤害自己的念头：12356（全国心理援助热线）· 120 / 110（紧急）。不在中国大陆：拨打当地紧急电话，或在 findahelpline.com 查找本地热线。');
+    download('zhuolu-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8');
+    showToast('已导出 Markdown。');
+  }
+
+  function importJSON() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = function () {
+      var f = input.files && input.files[0];
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var data = JSON.parse(String(reader.result));
+          if (!confirm('导入会覆盖当前数据。建议先导出备份。继续？')) return;
+          state = normalize(data);
+          save();
+          applyTheme();
+          renderAll();
+          showToast('导入完成。');
+        } catch (e) {
+          showToast('这个文件读不出来，可能不是本工具的备份。');
+        }
+      };
+      reader.readAsText(f, 'utf-8');
+    };
+    input.click();
+  }
+
+  function clearAll() {
+    if (!confirm('清空所有记录？这个动作不能撤销。建议先导出 JSON。')) return;
+    if (!confirm('再确认一次：所有记录都会消失。')) return;
+    state = blank();
+    save();
+    applyTheme();
+    clearCertFields();
+    renderAll();
+    showToast('已清空。');
+  }
+
+  function printPocket() {
+    window.print();
+  }
+
+  /* ---------------- 总渲染 ---------------- */
+
+  function renderAll() {
+    renderTopbar();
+    renderHome();
+    renderWindow();
+    renderRum();
+    renderCert();
+    renderToday();
+    renderRecords();
+    renderSleepLast();
+    renderSupport();
+    renderSettings();
+  }
+
+  function renderRecords() { recordsHtml(); }
+
+  /* ---------------- 事件 ---------------- */
+
+  var ACTIONS = {
+    'open-sos': openSOS,
+    'close-sos': closeSOS,
+    'sos-start': sosStart,
+    'sos-skip-breath': sosSkipBreath,
+    'sos-next': sosToAfter,
+    'sos-skip-ground': sosToAfter,
+    'sos-finish': sosFinish,
+    'sos-restart': sosRestart,
+    'shuffle-thing': pickTiny,
+    'go': function (el) { go(el.getAttribute('data-route') || 'now'); },
+    'toggle-window-edit': function () {
+      var f = $('#window-edit');
+      if (!f) return;
+      f.hidden = !f.hidden;
+      if (!f.hidden) { var i = $('#window-time-input'); if (i) { i.value = state.window.time; i.focus(); } }
+    },
+    'save-window': function () {
+      var i = $('#window-time-input');
+      var v = i ? i.value : '';
+      if (!/^\d{2}:\d{2}$/.test(v)) { showToast('选一个时间再保存。'); return; }
+      state.window.time = v;
+      state.window.openedAt = 0;
+      state.window.closedDay = '';
+      save();
+      var f = $('#window-edit');
+      if (f) f.hidden = true;
+      renderAll();
+      showToast('担忧窗口改成每天 ' + v + '。');
+    },
+    'open-window': openWindow,
+    'close-window': closeWindow,
+    'park-thought': function () { toggleParkForm($('#park-form') && !$('#park-form').hidden ? false : true); },
+    'save-park': savePark,
+    'cancel-park': function () { toggleParkForm(false); },
+    'del-parked': function (el) {
+      var id = el.getAttribute('data-id');
+      state.parked = state.parked.filter(function (p) { return p.id !== id; });
+      save();
+      renderWindow();
+      renderHome();
+    },
+    'start-intercept': openIntercept,
+    'close-intercept': closeIntercept,
+    'it-next': itNext,
+    'it-back': function () { showITStep(1); },
+    'it-save': itSave,
+    'it-again': function () { resetIntercept(); showITStep(1); },
+    'save-cert': saveCert,
+    'clear-cert': function () { clearCertFields(); showToast('已清空输入。'); },
+    'del-cert': function (el) {
+      var id = el.getAttribute('data-id');
+      state.cert = state.cert.filter(function (c) { return c.id !== id; });
+      save();
+      renderCert();
+      renderRecords();
+    },
+    'save-tr': saveTR,
+    'save-sleep': saveSleep,
+    'save-support': saveSupport,
+    'export-json': exportJSON,
+    'export-md': exportMD,
+    'import-json': importJSON,
+    'print-pocket': printPocket,
+    'clear-all': clearAll,
+    'timer-start': toggleTimer,
+    'timer-reset': resetTimer,
+    'shuffle-step': shuffleStep
+  };
+
+  document.addEventListener('click', function (e) {
+    var actionEl = e.target.closest ? e.target.closest('[data-action]') : null;
+    if (actionEl) {
+      var name = actionEl.getAttribute('data-action');
+      if (ACTIONS[name]) {
+        e.preventDefault();
+        ACTIONS[name](actionEl, e);
+        return;
+      }
+    }
+
+    var chip = e.target.closest ? e.target.closest('[data-need]') : null;
+    if (chip) {
+      chip.classList.toggle('is-on');
+      return;
+    }
+
+    var kind = e.target.closest ? e.target.closest('#it-kinds [data-kind]') : null;
+    if (kind) {
+      it.kind = kind.getAttribute('data-kind');
+      $$('#it-kinds .kind-btn').forEach(function (b) { b.classList.toggle('is-on', b === kind); });
+      return;
+    }
+
+    var sense = e.target.closest ? e.target.closest('.ground-row') : null;
+    if (sense) {
+      var key = sense.getAttribute('data-sense');
+      var total = Number(sense.getAttribute('data-total')) || 1;
+      var n = (sos.ground[key] || 0);
+      if (n < total) n++;
+      sos.ground[key] = n;
+      var dots = $$('.ground-dots i', sense);
+      dots.forEach(function (d, i) { d.classList.toggle('is-on', i < n); });
+      sense.classList.toggle('is-done', n >= total);
+      return;
+    }
+
+    var check = e.target.closest ? e.target.closest('#today-checks .check-row') : null;
+    if (check) {
+      var d = todayData();
+      var ck = check.getAttribute('data-check');
+      d[ck] = !d[ck];
+      save();
+      renderToday();
+      return;
+    }
+
+    var stepCatBtn = e.target.closest ? e.target.closest('[data-step-cat]') : null;
+    if (stepCatBtn) {
+      stepCat = stepCatBtn.getAttribute('data-step-cat');
+      $$('#step-chips .chip').forEach(function (c) { c.classList.toggle('is-on', c === stepCatBtn); });
+      stepIdx = 0;
+      renderToday();
+      return;
+    }
+
+    var tab = e.target.closest ? e.target.closest('[data-rec-tab]') : null;
+    if (tab) {
+      var key2 = tab.getAttribute('data-rec-tab');
+      $$('[data-rec-tab]').forEach(function (t) {
+        var on = t === tab;
+        t.classList.toggle('is-on', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      $$('[data-rec-panel]').forEach(function (p) {
+        p.classList.toggle('is-on', p.getAttribute('data-rec-panel') === key2);
+      });
+      return;
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT' || t.type !== 'range') return;
+    var min = Number(t.min) || 0;
+    var max = Number(t.max) || 100;
+    var v = Number(t.value);
+    var pct = ((v - min) / (max - min)) * 100;
+    t.style.setProperty('--p', pct + '%');
+    if (t.id === 'sos-before') { var a = $('#sos-before-num'); if (a) a.textContent = String(v); }
+    if (t.id === 'sos-after') { var b = $('#sos-after-num'); if (b) b.textContent = String(v); }
+    if (t.id === 'tr-belief') { var c = $('#tr-belief-num'); if (c) c.textContent = v + '%'; }
+    if (t.id === 'tr-intensity') { var d = $('#tr-intensity-num'); if (d) d.textContent = String(v); }
+    if (t.id === 'tr-after') { var f = $('#tr-after-num'); if (f) f.textContent = String(v); }
+  });
+
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t) return;
+    if (t.id === 'setting-window') {
+      if (!/^\d{2}:\d{2}$/.test(t.value)) return;
+      state.window.time = t.value;
+      state.window.openedAt = 0;
+      state.window.closedDay = '';
+      save();
+      renderWindow();
+      renderHome();
+      showToast('担忧窗口改成每天 ' + t.value + '。');
+    }
+    if (t.id === 'setting-theme') {
+      state.settings.theme = t.value === 'dark' || t.value === 'light' ? t.value : 'auto';
+      save();
+      applyTheme();
+    }
+    if (t.id === 'setting-motion') {
+      state.settings.motion = t.value === 'reduce' ? 'reduce' : 'auto';
+      save();
+      applyTheme();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
+      if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) { closeIntercept(); return; }
+    }
+  });
+
+  /* ---------------- 启动 ---------------- */
+
+  function initRanges() {
+    $$('input[type="range"]').forEach(function (r) {
+      var min = Number(r.min) || 0;
+      var max = Number(r.max) || 100;
+      var pct = ((Number(r.value) - min) / (max - min)) * 100;
+      r.style.setProperty('--p', pct + '%');
+    });
+  }
+
+  function init() {
+    applyTheme();
+    initRanges();
+    renderAll();
+    if (!location.hash) {
+      location.replace('#/now');
+    } else {
+      renderRoute();
+    }
+    if (!storageOK) {
+      setTimeout(function () { showToast('这个浏览器不能本地保存，记录只在本次打开有效。'); }, 900);
+    }
+    setInterval(updateWindowTimer, 1000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+
+</script>
+</body>
+</html>
