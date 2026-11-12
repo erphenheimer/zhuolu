@@ -13,8 +13,7 @@
 > 如果此刻有伤害自己的念头：**12356**（全国心理援助热线）· **120 / 110**（紧急）。
 > 不在中国大陆：拨打当地紧急电话，或在 [findahelpline.com](https://findahelpline.com) 查找本地热线。
 
-**在线使用**：<https://erphenheimer.github.io/zhuolu/>  
-**离线使用**：下载 `index.html`，双击用浏览器打开。不需要联网，不需要安装。
+**使用方式**：下载 [`index.html`](https://github.com/erphenheimer/zhuolu/releases/latest/download/index.html)，双击用浏览器打开。不需要联网，不需要安装。
 
 ![着陆台首页](preview.png)
 
