@@ -6,6 +6,8 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
+  var APP_VERSION = '0.2.0';
+  var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', others: '猜别人的想法或结果', her: '猜别人的想法或结果', other: '说不清' };
@@ -44,7 +46,7 @@
       parked: [],
       daily: {},
       window: { time: '19:30', minutes: 15, openedAt: 0, closedDay: '' },
-      settings: { theme: 'auto', motion: 'auto', support: ['', ''] }
+      settings: { theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0 }
     };
   }
 
@@ -67,6 +69,7 @@
       b.settings.theme = raw.settings.theme === 'dark' || raw.settings.theme === 'light' ? raw.settings.theme : 'auto';
       b.settings.motion = raw.settings.motion === 'reduce' ? 'reduce' : 'auto';
       if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
+      b.settings.lastExportAt = Number(raw.settings.lastExportAt) || 0;
     }
     if (raw.firstSeen) b.firstSeen = Number(raw.firstSeen) || Date.now();
     return b;
@@ -477,13 +480,15 @@
     if (c) setTimeout(function () { c.focus(); }, 40);
   }
 
+  function anyOverlayOpen() {
+    return $$('.overlay').some(function (o) { return !o.hidden; });
+  }
+
   function closeOverlay(id) {
     var o = $(id);
     if (!o) return;
     o.hidden = true;
-    if (!$('#sos-overlay') || $('#sos-overlay').hidden) {
-      if (!$('#intercept-overlay') || $('#intercept-overlay').hidden) document.body.classList.remove('is-locked');
-    }
+    if (!anyOverlayOpen()) document.body.classList.remove('is-locked');
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* ignore */ } }
   }
 
@@ -1058,6 +1063,8 @@
     if (th) th.value = state.settings.theme || 'auto';
     var mo = $('#setting-motion');
     if (mo) mo.value = state.settings.motion || 'auto';
+    var ex = $('#export-note');
+    if (ex) ex.textContent = state.settings.lastExportAt ? '上次导出：' + fmtDayTime(state.settings.lastExportAt) : '还没有导出过备份。';
   }
 
   /* ---------------- 导出 / 导入 / 清空 ---------------- */
@@ -1073,9 +1080,52 @@
     setTimeout(function () { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); }, 800);
   }
 
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+  }
+
+  function isLocalFile() { return location.protocol === 'file:'; }
+
+  function saveFile(filename, text, mime, okMsg) {
+    var type = mime || 'application/json;charset=utf-8';
+    var blob = new Blob([text], { type: type });
+    var file = null;
+    try { file = new File([blob], filename, { type: type }); } catch (e) { file = null; }
+    var share = false;
+    try {
+      share = !!(file && (isIOS() || isStandalone()) && navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch (e) { share = false; }
+    if (share) {
+      navigator.share({ files: [file], title: '着陆台备份' }).then(function () {
+        showToast('已打开分享面板，保存到「文件」即可。');
+      }).catch(function () {
+        download(filename, text, type);
+        showToast(okMsg);
+      });
+      return;
+    }
+    download(filename, text, type);
+    showToast(okMsg);
+  }
+
   function exportJSON() {
-    download('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(state, null, 2));
-    showToast('已导出 JSON 备份。');
+    state.settings.lastExportAt = Date.now();
+    save();
+    var payload = {
+      app: 'zhuolu',
+      schemaVersion: SCHEMA_VERSION,
+      appVersion: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      data: state
+    };
+    saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8', '已导出 JSON 备份。');
+    renderSettings();
   }
 
   function exportMD() {
@@ -1119,8 +1169,52 @@
     lines.push('');
     lines.push('---');
     lines.push('如果出现伤害自己的念头：12356（全国心理援助热线）· 120 / 110（紧急）。不在中国大陆：拨打当地紧急电话，或在 findahelpline.com 查找本地热线。');
-    download('zhuolu-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8');
-    showToast('已导出 Markdown。');
+    saveFile('zhuolu-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8', '已导出 Markdown。');
+  }
+
+  var pendingImport = null;
+
+  function itemKey(x) {
+    if (x && typeof x === 'object' && x.id) return 'id:' + x.id;
+    try { return 'j:' + JSON.stringify(x); } catch (e) { return 'j:' + String(x); }
+  }
+
+  function mergeList(cur, incoming) {
+    var out = (cur || []).slice();
+    var seen = {};
+    out.forEach(function (x) { seen[itemKey(x)] = true; });
+    (incoming || []).forEach(function (x) {
+      var k = itemKey(x);
+      if (!seen[k]) { seen[k] = true; out.push(x); }
+    });
+    return out;
+  }
+
+  function renderImportDialog() {
+    if (!pendingImport) return;
+    var d = pendingImport.data;
+    var meta = pendingImport.meta;
+    var metaEl = $('#import-meta');
+    var countsEl = $('#import-counts');
+    var parts = ['文件：' + pendingImport.name];
+    if (meta) {
+      var t = meta.exportedAt ? Date.parse(meta.exportedAt) : NaN;
+      if (!isNaN(t)) parts.push('导出于 ' + fmtDayTime(t));
+      if (meta.appVersion) parts.push('版本 ' + meta.appVersion);
+    } else {
+      parts.push('旧版备份（无版本信息）');
+    }
+    if (metaEl) metaEl.textContent = parts.join(' · ');
+    var rows = [
+      ['反刍', d.rum.length],
+      ['确定性', d.cert.length],
+      ['思维记录', d.tr.length],
+      ['睡前', d.sleep.length],
+      ['着陆', d.sos.length],
+      ['盒子', d.parked.length],
+      ['今日打卡', Object.keys(d.daily || {}).length + ' 天']
+    ];
+    if (countsEl) countsEl.innerHTML = rows.map(function (r) { return '<span>' + r[0] + ' <b>' + r[1] + '</b></span>'; }).join('');
   }
 
   function importJSON() {
@@ -1133,13 +1227,23 @@
       var reader = new FileReader();
       reader.onload = function () {
         try {
-          var data = JSON.parse(String(reader.result));
-          if (!confirm('导入会覆盖当前数据。建议先导出备份。继续？')) return;
-          state = normalize(data);
-          save();
-          applyTheme();
-          renderAll();
-          showToast('导入完成。');
+          var parsed = JSON.parse(String(reader.result));
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
+          var raw = parsed;
+          var meta = null;
+          if (parsed.app === 'zhuolu' && parsed.data && typeof parsed.data === 'object') {
+            raw = parsed.data;
+            meta = parsed;
+          }
+          var data = normalize(raw);
+          pendingImport = {
+            data: data,
+            meta: meta,
+            name: f.name,
+            total: data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length
+          };
+          renderImportDialog();
+          openOverlay('#import-overlay');
         } catch (e) {
           showToast('这个文件读不出来，可能不是本工具的备份。');
         }
@@ -1148,6 +1252,140 @@
     };
     input.click();
   }
+
+  function closeImport() {
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+  }
+
+  function overwriteImport() {
+    if (!pendingImport) return;
+    if (!confirm('覆盖当前全部数据？建议先导出当前备份。')) return;
+    state = normalize(pendingImport.data);
+    save();
+    applyTheme();
+    clearCertFields();
+    renderAll();
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+    showToast('导入完成。');
+  }
+
+  function mergeImport() {
+    if (!pendingImport) return;
+    var d = pendingImport.data;
+    ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
+      state[k] = mergeList(state[k], d[k]);
+    });
+    if (d.daily && typeof d.daily === 'object') {
+      Object.keys(d.daily).forEach(function (day) {
+        if (!state.daily[day]) { state.daily[day] = d.daily[day]; return; }
+        var a = state.daily[day];
+        var b = d.daily[day];
+        if (a && b && typeof a === 'object' && typeof b === 'object') {
+          Object.keys(b).forEach(function (k) { if (!a[k]) a[k] = b[k]; });
+        }
+      });
+    }
+    if (d.firstSeen && d.firstSeen < state.firstSeen) state.firstSeen = d.firstSeen;
+    save();
+    applyTheme();
+    renderAll();
+    var added = pendingImport.total;
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+    showToast('已合并 ' + added + ' 条记录。');
+  }
+
+  var deferredPrompt = null;
+
+  function updateInstallUI() {
+    var tip = $('#install-tip');
+    var btn = $('#install-btn');
+    var badge = $('#install-badge');
+    if (!tip || !btn) return;
+    if (isLocalFile()) {
+      tip.innerHTML = '<b>当前是本地文件</b><span>安装到主屏需要网页版本。你也可以继续直接打开这个文件；数据只在本机。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = '本地文件';
+      return;
+    }
+    if (isStandalone()) {
+      tip.innerHTML = '<b>已经安装</b><span>以后从桌面上的「着陆台」图标打开，就是全屏应用。数据只存在这台设备。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = '已安装';
+      return;
+    }
+    if (isIOS()) {
+      tip.innerHTML = '<b>iPhone / iPad</b><span>用 Safari 打开本页 → 点底部「分享」→「添加到主屏幕」→「添加」。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = 'iOS';
+      return;
+    }
+    var android = /Android/i.test(navigator.userAgent);
+    if (deferredPrompt) {
+      tip.innerHTML = '<b>' + (android ? 'Android' : '电脑') + '</b><span>点下面的按钮安装；也可以从浏览器菜单里选择「安装应用」。</span>';
+      btn.hidden = false;
+      if (badge) badge.textContent = android ? 'Android' : '桌面';
+      return;
+    }
+    tip.innerHTML = android
+      ? '<b>Android</b><span>Chrome 右上角菜单 →「安装应用」或「添加到主屏幕」。</span>'
+      : '<b>电脑</b><span>Chrome / Edge：点地址栏右侧的安装图标，或菜单 →「安装着陆台」。Safari（macOS）：文件 → 添加到程序坞。</span>';
+    btn.hidden = true;
+    if (badge) badge.textContent = android ? 'Android' : '桌面';
+  }
+
+  function installApp() {
+    if (!deferredPrompt) { showToast('按上面的方法安装。'); return; }
+    var evt = deferredPrompt;
+    deferredPrompt = null;
+    evt.prompt();
+    evt.userChoice.then(function (choice) {
+      updateInstallUI();
+      if (choice && choice.outcome === 'accepted') showToast('已开始安装。');
+    }).catch(function () { updateInstallUI(); });
+  }
+
+  function setStorageNote(text) {
+    var el = $('#storage-note');
+    if (el) el.textContent = text;
+  }
+
+  function requestPersist() {
+    if (!(navigator.storage && navigator.storage.persisted)) {
+      setStorageNote('浏览器没有提供持久化存储接口，请定期导出备份。');
+      return;
+    }
+    navigator.storage.persisted().then(function (already) {
+      if (already) { setStorageNote('本机存储已持久化；仍建议定期导出备份。'); return null; }
+      if (!navigator.storage.persist) { setStorageNote('浏览器可能自动清理本站数据，请定期导出备份。'); return null; }
+      return navigator.storage.persist().then(function (granted) {
+        setStorageNote(granted ? '已申请持久化存储：浏览器不会自动清理本站数据。' : '浏览器暂未授予持久化存储：清理数据会删除记录，请定期导出。');
+        return null;
+      });
+    }).catch(function () {
+      setStorageNote('存储状态未知；请定期导出备份。');
+    });
+  }
+
+  function initSW() {
+    if (!('serviceWorker' in navigator)) return;
+    if (!/^https?:$/.test(location.protocol)) return;
+    navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存不可用时不影响使用 */ });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    updateInstallUI();
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredPrompt = null;
+    updateInstallUI();
+    showToast('已安装到这台设备。');
+  });
 
   function clearAll() {
     if (!confirm('清空所有记录？这个动作不能撤销。建议先导出 JSON。')) return;
@@ -1246,6 +1484,10 @@
     'export-json': exportJSON,
     'export-md': exportMD,
     'import-json': importJSON,
+    'close-import': closeImport,
+    'import-merge': mergeImport,
+    'import-overwrite': overwriteImport,
+    'install-app': installApp,
     'print-pocket': printPocket,
     'clear-all': clearAll,
     'timer-start': toggleTimer,
@@ -1366,6 +1608,7 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
       if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
       if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) { closeIntercept(); return; }
     }
@@ -1386,6 +1629,9 @@
     applyTheme();
     initRanges();
     renderAll();
+    updateInstallUI();
+    requestPersist();
+    initSW();
     if (!location.hash) {
       location.replace('#/now');
     } else {

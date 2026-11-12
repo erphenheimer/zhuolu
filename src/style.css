@@ -203,6 +203,7 @@ ul, ol { padding: 0; }
   z-index: 1;
   margin-left: var(--rail-w);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -233,7 +234,7 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 48px;
+  padding: calc(18px + env(safe-area-inset-top)) 48px 18px;
   border-bottom: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
@@ -1240,7 +1241,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 
 @media (max-width: 1080px) {
   .main { padding: 34px 36px 110px; }
-  .topbar { padding: 16px 36px; }
+  .topbar { padding: calc(16px + env(safe-area-inset-top)) 36px 16px; }
   .site-foot { padding: 24px 36px 30px; }
 }
 
@@ -1252,8 +1253,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .mobile-brand { display: flex; align-items: center; gap: 10px; }
   .mobile-brand .brand-mark { width: 28px; height: 28px; }
   .mobile-brand b { font-family: var(--font-serif); font-weight: 400; font-size: 17px; letter-spacing: .12em; }
-  .topbar { padding: 14px 22px; }
-  .main { padding: 26px 22px 120px; }
+  .topbar { padding: calc(14px + env(safe-area-inset-top)) 22px 14px; }
+  .main { padding: 26px 22px calc(120px + env(safe-area-inset-bottom)); }
   .site-foot { padding: 22px 22px 96px; display: block; }
   .site-foot span { display: block; margin-top: 4px; }
   .panel { max-height: 92vh; }
@@ -1281,6 +1282,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .intensity-num { font-size: 46px; min-width: 62px; }
   .window-time { font-size: 46px; }
   .toast { bottom: 104px; }
+  input[type="text"], input[type="time"], textarea, select { font-size: 16px; }
+  .sleep-grid textarea { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1387,4 +1390,32 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 @media print {
   .pocket { padding: 0; }
   .pocket__cols { gap: 14px; }
+}
+
+/* ---------- PWA / iOS 补丁 ---------- */
+
+html { -webkit-text-size-adjust: 100%; }
+
+a, button, .chip, .tab, summary { touch-action: manipulation; }
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 安装引导卡片 */
+.install-tip { display: grid; gap: 8px; }
+.install-tip b { color: var(--ink); font-weight: 600; }
+.install-meta { font-size: 11.5px; color: var(--muted); letter-spacing: .02em; }
+
+/* 导入预览 */
+.import-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 14px 0 4px; }
+.import-counts span { font-size: 12.5px; color: var(--ink-2); }
+.import-counts b { color: var(--ink); font-weight: 600; }
+.import-file { word-break: break-all; }
+
+/* A2HS 全屏时给底部一点额外余量（env 在浏览器里通常为 0） */
+@supports (padding: max(0px)) {
+  .bottom-nav { padding-bottom: max(8px, var(--safe-bottom)); }
+  .main { padding-bottom: calc(120px + var(--safe-bottom)); }
 }

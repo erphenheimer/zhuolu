@@ -8,6 +8,13 @@
 <title>着陆台 · 情绪危机自助工作台</title>
 <meta name="description" content="一个本地、离线、无账号的中文情绪危机自助工作台：反刍、焦虑、情绪风暴时，先着陆，再整理。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20rx=%2214%22%20fill=%22%234a6655%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2232%22%20r=%2215%22%20fill=%22none%22%20stroke=%22%23f2eee3%22%20stroke-width=%223%22/%3E%3Ccircle%20cx=%2232%22%20cy=%2232%22%20r=%224%22%20fill=%22%23f2eee3%22/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="着陆台">
+<meta name="format-detection" content="telephone=no">
 <script>
 (function(){try{
 var raw=localStorage.getItem('zhuolu.v1');var s=raw?JSON.parse(raw):{};
@@ -225,6 +232,7 @@ ul, ol { padding: 0; }
   z-index: 1;
   margin-left: var(--rail-w);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -255,7 +263,7 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 48px;
+  padding: calc(18px + env(safe-area-inset-top)) 48px 18px;
   border-bottom: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(10px);
@@ -1262,7 +1270,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 
 @media (max-width: 1080px) {
   .main { padding: 34px 36px 110px; }
-  .topbar { padding: 16px 36px; }
+  .topbar { padding: calc(16px + env(safe-area-inset-top)) 36px 16px; }
   .site-foot { padding: 24px 36px 30px; }
 }
 
@@ -1274,8 +1282,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .mobile-brand { display: flex; align-items: center; gap: 10px; }
   .mobile-brand .brand-mark { width: 28px; height: 28px; }
   .mobile-brand b { font-family: var(--font-serif); font-weight: 400; font-size: 17px; letter-spacing: .12em; }
-  .topbar { padding: 14px 22px; }
-  .main { padding: 26px 22px 120px; }
+  .topbar { padding: calc(14px + env(safe-area-inset-top)) 22px 14px; }
+  .main { padding: 26px 22px calc(120px + env(safe-area-inset-bottom)); }
   .site-foot { padding: 22px 22px 96px; display: block; }
   .site-foot span { display: block; margin-top: 4px; }
   .panel { max-height: 92vh; }
@@ -1303,6 +1311,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .intensity-num { font-size: 46px; min-width: 62px; }
   .window-time { font-size: 46px; }
   .toast { bottom: 104px; }
+  input[type="text"], input[type="time"], textarea, select { font-size: 16px; }
+  .sleep-grid textarea { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1409,6 +1419,34 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 @media print {
   .pocket { padding: 0; }
   .pocket__cols { gap: 14px; }
+}
+
+/* ---------- PWA / iOS 补丁 ---------- */
+
+html { -webkit-text-size-adjust: 100%; }
+
+a, button, .chip, .tab, summary { touch-action: manipulation; }
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 安装引导卡片 */
+.install-tip { display: grid; gap: 8px; }
+.install-tip b { color: var(--ink); font-weight: 600; }
+.install-meta { font-size: 11.5px; color: var(--muted); letter-spacing: .02em; }
+
+/* 导入预览 */
+.import-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 14px 0 4px; }
+.import-counts span { font-size: 12.5px; color: var(--ink-2); }
+.import-counts b { color: var(--ink); font-weight: 600; }
+.import-file { word-break: break-all; }
+
+/* A2HS 全屏时给底部一点额外余量（env 在浏览器里通常为 0） */
+@supports (padding: max(0px)) {
+  .bottom-nav { padding-bottom: max(8px, var(--safe-bottom)); }
+  .main { padding-bottom: calc(120px + var(--safe-bottom)); }
 }
 
 </style>
@@ -1802,6 +1840,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
           <button class="btn btn--ghost btn--sm" data-action="print-pocket">打印口袋卡</button>
           <button class="btn btn--danger btn--sm" data-action="clear-all">清空所有数据</button>
         </div>
+        <p class="small muted mt-12" id="export-note"></p>
+        <p class="small muted mt-8" id="storage-note"></p>
         <div class="divider"></div>
         <div class="support-row">
           <div class="field"><label for="setting-window">担忧窗口时间</label><input type="time" id="setting-window" value="19:30"></div>
@@ -1814,13 +1854,22 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
         </div>
       </div>
 
+      <div class="card" id="install-card">
+        <div class="card-head"><h2 class="h3">安装到设备</h2><span class="badge" id="install-badge">PWA</span></div>
+        <p class="small muted">装好后从桌面图标打开：全屏、离线可用；数据仍然只存在本机。</p>
+        <div class="install-tip small mt-12" id="install-tip"></div>
+        <div class="actions-row mt-16 mb-0">
+          <button class="btn btn--primary btn--sm" data-action="install-app" id="install-btn" hidden>安装到这台设备</button>
+        </div>
+      </div>
+
       <div class="card card--quiet">
         <div class="card-head"><h2 class="h3">关于这个工具</h2></div>
         <p class="small">着陆台是一个自助练习工具，不是医疗设备，也不替代心理咨询或精神科诊疗。里面的方法是认知行为取向（CBT）与接纳承诺取向（ACT）里常见的自助技术：情绪命名、延长呼气、5-4-3-2-1 接地、担忧推迟、行为激活、思维记录。</p>
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
-        <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。清除浏览器数据会一起清掉，重要内容建议导出备份。</p>
+        <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.1.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.2.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -2040,6 +2089,28 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   </div>
 </div>
 
+<!-- ============ 导入预览浮层 ============ -->
+<div class="overlay" id="import-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="import-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div><span class="panel__kicker">导入备份</span></div>
+      <button class="panel__close" data-action="close-import" aria-label="关闭导入">×</button>
+    </div>
+    <div class="panel__body">
+      <h2 class="h2" id="import-title">发现一份备份。</h2>
+      <p class="small muted import-file" id="import-meta"></p>
+      <div class="import-counts" id="import-counts"></div>
+      <p class="small muted">合并：把备份里的记录追加到当前数据，同一条不会重复。覆盖：替换当前全部数据。</p>
+      <p class="small muted mt-12">导入前建议先导出当前备份。导入后可以继续在「更多 → 导出」里备份。</p>
+      <div class="step-actions">
+        <button class="btn btn--primary" data-action="import-merge">合并</button>
+        <button class="btn btn--ghost" data-action="import-overwrite">覆盖当前数据</button>
+        <button class="btn btn--ghost" data-action="close-import">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- ============ 打印口袋卡 ============ -->
@@ -2085,6 +2156,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   'use strict';
 
   var KEY = 'zhuolu.v1';
+  var APP_VERSION = '0.2.0';
+  var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', others: '猜别人的想法或结果', her: '猜别人的想法或结果', other: '说不清' };
@@ -2123,7 +2196,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
       parked: [],
       daily: {},
       window: { time: '19:30', minutes: 15, openedAt: 0, closedDay: '' },
-      settings: { theme: 'auto', motion: 'auto', support: ['', ''] }
+      settings: { theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0 }
     };
   }
 
@@ -2146,6 +2219,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
       b.settings.theme = raw.settings.theme === 'dark' || raw.settings.theme === 'light' ? raw.settings.theme : 'auto';
       b.settings.motion = raw.settings.motion === 'reduce' ? 'reduce' : 'auto';
       if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
+      b.settings.lastExportAt = Number(raw.settings.lastExportAt) || 0;
     }
     if (raw.firstSeen) b.firstSeen = Number(raw.firstSeen) || Date.now();
     return b;
@@ -2556,13 +2630,15 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     if (c) setTimeout(function () { c.focus(); }, 40);
   }
 
+  function anyOverlayOpen() {
+    return $$('.overlay').some(function (o) { return !o.hidden; });
+  }
+
   function closeOverlay(id) {
     var o = $(id);
     if (!o) return;
     o.hidden = true;
-    if (!$('#sos-overlay') || $('#sos-overlay').hidden) {
-      if (!$('#intercept-overlay') || $('#intercept-overlay').hidden) document.body.classList.remove('is-locked');
-    }
+    if (!anyOverlayOpen()) document.body.classList.remove('is-locked');
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* ignore */ } }
   }
 
@@ -3137,6 +3213,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     if (th) th.value = state.settings.theme || 'auto';
     var mo = $('#setting-motion');
     if (mo) mo.value = state.settings.motion || 'auto';
+    var ex = $('#export-note');
+    if (ex) ex.textContent = state.settings.lastExportAt ? '上次导出：' + fmtDayTime(state.settings.lastExportAt) : '还没有导出过备份。';
   }
 
   /* ---------------- 导出 / 导入 / 清空 ---------------- */
@@ -3152,9 +3230,52 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     setTimeout(function () { URL.revokeObjectURL(url); if (a.parentNode) a.parentNode.removeChild(a); }, 800);
   }
 
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+  }
+
+  function isLocalFile() { return location.protocol === 'file:'; }
+
+  function saveFile(filename, text, mime, okMsg) {
+    var type = mime || 'application/json;charset=utf-8';
+    var blob = new Blob([text], { type: type });
+    var file = null;
+    try { file = new File([blob], filename, { type: type }); } catch (e) { file = null; }
+    var share = false;
+    try {
+      share = !!(file && (isIOS() || isStandalone()) && navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch (e) { share = false; }
+    if (share) {
+      navigator.share({ files: [file], title: '着陆台备份' }).then(function () {
+        showToast('已打开分享面板，保存到「文件」即可。');
+      }).catch(function () {
+        download(filename, text, type);
+        showToast(okMsg);
+      });
+      return;
+    }
+    download(filename, text, type);
+    showToast(okMsg);
+  }
+
   function exportJSON() {
-    download('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(state, null, 2));
-    showToast('已导出 JSON 备份。');
+    state.settings.lastExportAt = Date.now();
+    save();
+    var payload = {
+      app: 'zhuolu',
+      schemaVersion: SCHEMA_VERSION,
+      appVersion: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      data: state
+    };
+    saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8', '已导出 JSON 备份。');
+    renderSettings();
   }
 
   function exportMD() {
@@ -3198,8 +3319,52 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     lines.push('');
     lines.push('---');
     lines.push('如果出现伤害自己的念头：12356（全国心理援助热线）· 120 / 110（紧急）。不在中国大陆：拨打当地紧急电话，或在 findahelpline.com 查找本地热线。');
-    download('zhuolu-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8');
-    showToast('已导出 Markdown。');
+    saveFile('zhuolu-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8', '已导出 Markdown。');
+  }
+
+  var pendingImport = null;
+
+  function itemKey(x) {
+    if (x && typeof x === 'object' && x.id) return 'id:' + x.id;
+    try { return 'j:' + JSON.stringify(x); } catch (e) { return 'j:' + String(x); }
+  }
+
+  function mergeList(cur, incoming) {
+    var out = (cur || []).slice();
+    var seen = {};
+    out.forEach(function (x) { seen[itemKey(x)] = true; });
+    (incoming || []).forEach(function (x) {
+      var k = itemKey(x);
+      if (!seen[k]) { seen[k] = true; out.push(x); }
+    });
+    return out;
+  }
+
+  function renderImportDialog() {
+    if (!pendingImport) return;
+    var d = pendingImport.data;
+    var meta = pendingImport.meta;
+    var metaEl = $('#import-meta');
+    var countsEl = $('#import-counts');
+    var parts = ['文件：' + pendingImport.name];
+    if (meta) {
+      var t = meta.exportedAt ? Date.parse(meta.exportedAt) : NaN;
+      if (!isNaN(t)) parts.push('导出于 ' + fmtDayTime(t));
+      if (meta.appVersion) parts.push('版本 ' + meta.appVersion);
+    } else {
+      parts.push('旧版备份（无版本信息）');
+    }
+    if (metaEl) metaEl.textContent = parts.join(' · ');
+    var rows = [
+      ['反刍', d.rum.length],
+      ['确定性', d.cert.length],
+      ['思维记录', d.tr.length],
+      ['睡前', d.sleep.length],
+      ['着陆', d.sos.length],
+      ['盒子', d.parked.length],
+      ['今日打卡', Object.keys(d.daily || {}).length + ' 天']
+    ];
+    if (countsEl) countsEl.innerHTML = rows.map(function (r) { return '<span>' + r[0] + ' <b>' + r[1] + '</b></span>'; }).join('');
   }
 
   function importJSON() {
@@ -3212,13 +3377,23 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
       var reader = new FileReader();
       reader.onload = function () {
         try {
-          var data = JSON.parse(String(reader.result));
-          if (!confirm('导入会覆盖当前数据。建议先导出备份。继续？')) return;
-          state = normalize(data);
-          save();
-          applyTheme();
-          renderAll();
-          showToast('导入完成。');
+          var parsed = JSON.parse(String(reader.result));
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
+          var raw = parsed;
+          var meta = null;
+          if (parsed.app === 'zhuolu' && parsed.data && typeof parsed.data === 'object') {
+            raw = parsed.data;
+            meta = parsed;
+          }
+          var data = normalize(raw);
+          pendingImport = {
+            data: data,
+            meta: meta,
+            name: f.name,
+            total: data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length
+          };
+          renderImportDialog();
+          openOverlay('#import-overlay');
         } catch (e) {
           showToast('这个文件读不出来，可能不是本工具的备份。');
         }
@@ -3227,6 +3402,140 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     };
     input.click();
   }
+
+  function closeImport() {
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+  }
+
+  function overwriteImport() {
+    if (!pendingImport) return;
+    if (!confirm('覆盖当前全部数据？建议先导出当前备份。')) return;
+    state = normalize(pendingImport.data);
+    save();
+    applyTheme();
+    clearCertFields();
+    renderAll();
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+    showToast('导入完成。');
+  }
+
+  function mergeImport() {
+    if (!pendingImport) return;
+    var d = pendingImport.data;
+    ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
+      state[k] = mergeList(state[k], d[k]);
+    });
+    if (d.daily && typeof d.daily === 'object') {
+      Object.keys(d.daily).forEach(function (day) {
+        if (!state.daily[day]) { state.daily[day] = d.daily[day]; return; }
+        var a = state.daily[day];
+        var b = d.daily[day];
+        if (a && b && typeof a === 'object' && typeof b === 'object') {
+          Object.keys(b).forEach(function (k) { if (!a[k]) a[k] = b[k]; });
+        }
+      });
+    }
+    if (d.firstSeen && d.firstSeen < state.firstSeen) state.firstSeen = d.firstSeen;
+    save();
+    applyTheme();
+    renderAll();
+    var added = pendingImport.total;
+    pendingImport = null;
+    closeOverlay('#import-overlay');
+    showToast('已合并 ' + added + ' 条记录。');
+  }
+
+  var deferredPrompt = null;
+
+  function updateInstallUI() {
+    var tip = $('#install-tip');
+    var btn = $('#install-btn');
+    var badge = $('#install-badge');
+    if (!tip || !btn) return;
+    if (isLocalFile()) {
+      tip.innerHTML = '<b>当前是本地文件</b><span>安装到主屏需要网页版本。你也可以继续直接打开这个文件；数据只在本机。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = '本地文件';
+      return;
+    }
+    if (isStandalone()) {
+      tip.innerHTML = '<b>已经安装</b><span>以后从桌面上的「着陆台」图标打开，就是全屏应用。数据只存在这台设备。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = '已安装';
+      return;
+    }
+    if (isIOS()) {
+      tip.innerHTML = '<b>iPhone / iPad</b><span>用 Safari 打开本页 → 点底部「分享」→「添加到主屏幕」→「添加」。</span>';
+      btn.hidden = true;
+      if (badge) badge.textContent = 'iOS';
+      return;
+    }
+    var android = /Android/i.test(navigator.userAgent);
+    if (deferredPrompt) {
+      tip.innerHTML = '<b>' + (android ? 'Android' : '电脑') + '</b><span>点下面的按钮安装；也可以从浏览器菜单里选择「安装应用」。</span>';
+      btn.hidden = false;
+      if (badge) badge.textContent = android ? 'Android' : '桌面';
+      return;
+    }
+    tip.innerHTML = android
+      ? '<b>Android</b><span>Chrome 右上角菜单 →「安装应用」或「添加到主屏幕」。</span>'
+      : '<b>电脑</b><span>Chrome / Edge：点地址栏右侧的安装图标，或菜单 →「安装着陆台」。Safari（macOS）：文件 → 添加到程序坞。</span>';
+    btn.hidden = true;
+    if (badge) badge.textContent = android ? 'Android' : '桌面';
+  }
+
+  function installApp() {
+    if (!deferredPrompt) { showToast('按上面的方法安装。'); return; }
+    var evt = deferredPrompt;
+    deferredPrompt = null;
+    evt.prompt();
+    evt.userChoice.then(function (choice) {
+      updateInstallUI();
+      if (choice && choice.outcome === 'accepted') showToast('已开始安装。');
+    }).catch(function () { updateInstallUI(); });
+  }
+
+  function setStorageNote(text) {
+    var el = $('#storage-note');
+    if (el) el.textContent = text;
+  }
+
+  function requestPersist() {
+    if (!(navigator.storage && navigator.storage.persisted)) {
+      setStorageNote('浏览器没有提供持久化存储接口，请定期导出备份。');
+      return;
+    }
+    navigator.storage.persisted().then(function (already) {
+      if (already) { setStorageNote('本机存储已持久化；仍建议定期导出备份。'); return null; }
+      if (!navigator.storage.persist) { setStorageNote('浏览器可能自动清理本站数据，请定期导出备份。'); return null; }
+      return navigator.storage.persist().then(function (granted) {
+        setStorageNote(granted ? '已申请持久化存储：浏览器不会自动清理本站数据。' : '浏览器暂未授予持久化存储：清理数据会删除记录，请定期导出。');
+        return null;
+      });
+    }).catch(function () {
+      setStorageNote('存储状态未知；请定期导出备份。');
+    });
+  }
+
+  function initSW() {
+    if (!('serviceWorker' in navigator)) return;
+    if (!/^https?:$/.test(location.protocol)) return;
+    navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存不可用时不影响使用 */ });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    updateInstallUI();
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredPrompt = null;
+    updateInstallUI();
+    showToast('已安装到这台设备。');
+  });
 
   function clearAll() {
     if (!confirm('清空所有记录？这个动作不能撤销。建议先导出 JSON。')) return;
@@ -3325,6 +3634,10 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     'export-json': exportJSON,
     'export-md': exportMD,
     'import-json': importJSON,
+    'close-import': closeImport,
+    'import-merge': mergeImport,
+    'import-overwrite': overwriteImport,
+    'install-app': installApp,
     'print-pocket': printPocket,
     'clear-all': clearAll,
     'timer-start': toggleTimer,
@@ -3445,6 +3758,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
       if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
       if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) { closeIntercept(); return; }
     }
@@ -3465,6 +3779,9 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
     applyTheme();
     initRanges();
     renderAll();
+    updateInstallUI();
+    requestPersist();
+    initSW();
     if (!location.hash) {
       location.replace('#/now');
     } else {

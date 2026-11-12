@@ -7,25 +7,29 @@
 - **0.x**：能用、能试，功能和数据格式都还会变。
 - **1.0 只留给独立软件**：能安装、能长期保存、数据能导出导入、格式冻结、有迁移测试。在那之前不叫 1.0。
 
+## 已完成
+
+### 0.2.0 可安装的 PWA（2026-11-12）
+
+- `manifest.webmanifest` + service worker：离线安装、桌面图标、全屏
+- iOS / Android / 桌面安装引导；iOS 安全区、`100dvh`、输入框 16px 防缩放
+- 导出 JSON 带 `schemaVersion` / 导出时间；导入前预览条数，支持合并 / 覆盖
+- 申请 `navigator.storage.persist()`；「更多」页显示导出时间与存储状态
+- iOS 上导出走系统分享面板（`navigator.share`），可存到「文件」
+
 ## 计划
 
-### 0.1.x 数据可带走（下一步）
+### 0.2.x 数据可靠性（下一步）
 
-- 导出 JSON：带 `schemaVersion`、导出时间、应用版本
-- 导入：合并 / 覆盖两种策略，导入前预览条数
-- 保留 Markdown 导出（方便人看）
+- 存储从 localStorage 迁到 IndexedDB，启动时自动迁移（可选，视实际数据量）
+- 备份提醒：超过一定天数没导出时提示
 - 可选：加密备份（密码派生密钥，AES-GCM）
 
-### 0.2.0 可安装的本地应用（PWA）
+### 0.3.0 原生壳（可选）
 
-- `manifest` + service worker：离线安装、桌面图标、全屏
-- 存储从 localStorage 迁到 IndexedDB，启动时自动迁移
-- 数据格式版本号与迁移函数
-
-### 0.3.0 桌面壳（可选）
-
-- Tauri 打包（体积小）：本地文件读写、备份提醒
-- 安装包签名、自动更新、处理杀毒软件误报
+- Capacitor 打包 iOS / Android；桌面可选 Tauri
+- iOS 构建需要 macOS + Xcode（可用云 Mac / CI）；TestFlight 做 beta
+- 中国区 App Store 需要 App 备案；不做云同步与账号
 
 ### 1.0.0
 
