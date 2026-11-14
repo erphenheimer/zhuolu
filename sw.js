@@ -1,7 +1,7 @@
 /* 着陆台 PWA Service Worker
  * 只缓存本应用自己的文件：不联网、不上传、不缓存第三方资源。
  */
-var CACHE = 'zhuolu-v0.2.0';
+var CACHE = 'zhuolu-v0.2.1';
 var ASSETS = [
   './',
   './index.html',
@@ -18,8 +18,16 @@ self.addEventListener('install', function (event) {
       return Promise.all(ASSETS.map(function (url) {
         return cache.add(url).catch(function () { /* 单个失败不阻塞安装 */ });
       }));
-    }).then(function () { return self.skipWaiting(); })
+    }).then(function () {
+      // 首次安装直接接管；版本更新时等页面提示，由用户点「现在更新」后再切换
+      if (!self.registration.active) return self.skipWaiting();
+      return null;
+    })
   );
+});
+
+self.addEventListener('message', function (event) {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', function (event) {

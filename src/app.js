@@ -6,11 +6,15 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.2.0';
+  var APP_VERSION = '0.2.1';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', others: '猜别人的想法或结果', her: '猜别人的想法或结果', other: '说不清' };
+  var REC_LABEL = { sos: '着陆', rum: '反刍', cert: '确定性', tr: '思维记录', sleep: '睡前' };
+  var NUDGE_AFTER_DAYS = 14;
+  var NUDGE_FIRST_DAYS = 3;
+  var NUDGE_SNOOZE_MS = 3 * 86400000;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -46,7 +50,7 @@
       parked: [],
       daily: {},
       window: { time: '19:30', minutes: 15, openedAt: 0, closedDay: '' },
-      settings: { theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0 }
+      settings: { theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0, nudgeSnoozeUntil: 0 }
     };
   }
 
@@ -70,6 +74,7 @@
       b.settings.motion = raw.settings.motion === 'reduce' ? 'reduce' : 'auto';
       if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
       b.settings.lastExportAt = Number(raw.settings.lastExportAt) || 0;
+      b.settings.nudgeSnoozeUntil = Number(raw.settings.nudgeSnoozeUntil) || 0;
     }
     if (raw.firstSeen) b.firstSeen = Number(raw.firstSeen) || Date.now();
     return b;
@@ -118,13 +123,28 @@
   /* ---------------- 提示 ---------------- */
 
   var toastTimer = null;
-  function showToast(msg) {
+  var toastAction = null;
+
+  function hideToast() {
+    var el = $('#toast');
+    if (el) el.classList.remove('is-on');
+    toastAction = null;
+  }
+
+  function showToast(msg, actionLabel, actionFn, ms) {
     var el = $('#toast');
     if (!el) return;
-    el.textContent = msg;
+    var msgEl = $('#toast-msg');
+    if (msgEl) msgEl.textContent = msg; else el.textContent = msg;
+    var btn = $('#toast-action');
+    toastAction = actionFn || null;
+    if (btn) {
+      if (actionLabel && actionFn) { btn.textContent = actionLabel; btn.hidden = false; }
+      else { btn.hidden = true; }
+    }
     el.classList.add('is-on');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('is-on'); }, 2600);
+    toastTimer = setTimeout(hideToast, ms || (actionFn ? 6000 : 2600));
   }
 
   /* ---------------- 路由 ---------------- */
@@ -260,6 +280,87 @@
       } else {
         hw.hidden = true;
       }
+    }
+  }
+
+  /* ---------------- 备份与存储 ---------------- */
+
+  var persistNote = '';
+  var quotaWarned = false;
+
+  function recordCount() {
+    return ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].reduce(function (n, k) {
+      return n + (state[k] || []).length;
+    }, 0);
+  }
+
+  function backupStatus() {
+    var count = recordCount();
+    if (!count) return { show: false };
+    var now = Date.now();
+    if (Number(state.settings.nudgeSnoozeUntil) > now) return { show: false };
+    var last = Number(state.settings.lastExportAt) || 0;
+    var since = last || Number(state.firstSeen) || now;
+    var days = Math.max(0, Math.floor((now - since) / 86400000));
+    if (last) {
+      if (days < NUDGE_AFTER_DAYS) return { show: false, days: days };
+      return { show: true, days: days, never: false };
+    }
+    if (days < NUDGE_FIRST_DAYS) return { show: false, days: days };
+    return { show: true, days: days, never: true };
+  }
+
+  function renderBackupNudge() {
+    var st = backupStatus();
+    var nudge = $('#backup-nudge');
+    if (nudge) {
+      nudge.hidden = !st.show;
+      if (st.show) {
+        var title = $('#backup-nudge-title');
+        var text = $('#backup-nudge-text');
+        if (title) title.textContent = st.never ? '还没有导出过备份' : '距离上次备份 ' + st.days + ' 天';
+        if (text) {
+          text.textContent = st.never
+            ? '记录只存在这台设备的浏览器里。导出一份 JSON 存到网盘或电脑，换手机、清缓存时才不会丢。'
+            : '浏览器数据可能被系统清理。现在导出一份，换设备或清缓存时能接上。';
+        }
+      }
+    }
+    var badge = $('#backup-badge');
+    if (badge) badge.hidden = !st.show;
+    var ex = $('#export-note');
+    if (ex) {
+      if (!state.settings.lastExportAt) {
+        ex.textContent = '还没有导出过备份。';
+      } else {
+        var d = Math.max(0, Math.floor((Date.now() - state.settings.lastExportAt) / 86400000));
+        ex.textContent = '上次导出：' + fmtDayTime(state.settings.lastExportAt) + (d >= 1 ? '（' + d + ' 天前）' : '（今天）');
+      }
+    }
+  }
+
+  function stateBytes() {
+    try {
+      return JSON.stringify(state).length * 2;
+    } catch (e) { return 0; }
+  }
+
+  function fmtBytes(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return Math.round(b / 1024) + ' KB';
+    return b + ' B';
+  }
+
+  function refreshStorageNote() {
+    var bytes = stateBytes();
+    var parts = [];
+    if (persistNote) parts.push(persistNote);
+    if (bytes > 0) parts.push('本机数据约 ' + fmtBytes(bytes) + ' / 浏览器上限约 5 MB');
+    if (bytes > 4194304) parts.push('空间快满了，建议导出后清理旧记录。');
+    setStorageNote(parts.join(' · '));
+    if (bytes > 4194304 && !quotaWarned) {
+      quotaWarned = true;
+      showToast('本地存储快满了，先导出一份备份。');
     }
   }
 
@@ -961,6 +1062,38 @@
 
   function emptyItem(text) { return '<li class="empty">' + text + '</li>'; }
 
+  function delBtnHtml(kind, id, label) {
+    return '<button class="icon-btn" data-action="del-record" data-kind="' + kind + '" data-id="' + esc(id) + '" aria-label="删除这条' + label + '记录">×</button>';
+  }
+
+  var undoDelete = null;
+
+  function removeRecord(kind, id) {
+    var arr = state[kind];
+    if (!arr) return;
+    var idx = -1;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].id === id) { idx = i; break; }
+    }
+    if (idx < 0) return;
+    var item = arr[idx];
+    arr.splice(idx, 1);
+    save();
+    renderAll();
+    var label = REC_LABEL[kind] || '这条';
+    undoDelete = { kind: kind, index: idx, item: item };
+    showToast('已删除一条' + label + '记录', '撤销', function () {
+      if (!undoDelete) return;
+      var u = undoDelete;
+      undoDelete = null;
+      if (!state[u.kind]) return;
+      state[u.kind].splice(Math.min(u.index, state[u.kind].length), 0, u.item);
+      save();
+      renderAll();
+      showToast('已恢复。');
+    }, 6000);
+  }
+
   function recordsHtml() {
     var rum = state.rum.slice(0, 40);
     var cert = state.cert.slice(0, 20);
@@ -973,14 +1106,16 @@
       rumEl.innerHTML = rum.length ? rum.map(function (r) {
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写内容）') + '</div>' +
           (r.action ? '<div class="small muted">下一步：' + esc(r.action) + '</div>' : '') +
-          '<div class="item__meta">' + KIND_LABEL[r.kind] + ' · ' + fmtDayTime(r.t) + '</div></div></li>';
+          '<div class="item__meta">' + KIND_LABEL[r.kind] + ' · ' + fmtDayTime(r.t) + '</div></div>' +
+          delBtnHtml('rum', r.id, '反刍') + '</li>';
       }).join('') : emptyItem('还没有反刍记录。');
     }
 
     var certEl = $('#rec-cert');
     if (certEl) certEl.innerHTML = cert.length ? cert.map(function (c) {
       return '<li class="item"><div class="item__main"><div class="item__meta">' + fmtDayTime(c.t) + '</div>' +
-        '<div class="cert-lines">' + certSummaryHtml(c) + '</div></div></li>';
+        '<div class="cert-lines">' + certSummaryHtml(c) + '</div></div>' +
+        delBtnHtml('cert', c.id, '确定性') + '</li>';
     }).join('') : emptyItem('还没有确定性整理。');
 
     var trEl = $('#rec-tr');
@@ -988,7 +1123,8 @@
       trEl.innerHTML = tr.length ? tr.map(function (r) {
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写自动思维）') + '</div>' +
           '<div class="small muted">情境：' + esc((r.situation || '').slice(0, 60)) + '</div>' +
-          '<div class="item__meta">' + (r.intensity != null ? r.intensity : '?') + ' → ' + (r.after != null ? r.after : '?') + ' · ' + fmtDayTime(r.t) + '</div></div></li>';
+          '<div class="item__meta">' + (r.intensity != null ? r.intensity : '?') + ' → ' + (r.after != null ? r.after : '?') + ' · ' + fmtDayTime(r.t) + '</div></div>' +
+          delBtnHtml('tr', r.id, '思维') + '</li>';
       }).join('') : emptyItem('还没有思维记录。');
     }
 
@@ -997,7 +1133,8 @@
       sleepEl.innerHTML = sleep.length ? sleep.map(function (r) {
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.did || r.fact || '（没写内容）') + '</div>' +
           '<div class="small muted">' + esc(r.tomorrow ? '明天：' + r.tomorrow : '') + '</div>' +
-          '<div class="item__meta">' + fmtDayTime(r.t) + '</div></div></li>';
+          '<div class="item__meta">' + fmtDayTime(r.t) + '</div></div>' +
+          delBtnHtml('sleep', r.id, '睡前') + '</li>';
       }).join('') : emptyItem('还没有睡前记录。');
     }
 
@@ -1006,7 +1143,8 @@
       sosEl.innerHTML = sosList.length ? sosList.map(function (r) {
         var d = (r.before != null && r.after != null) ? (r.before - r.after) : 0;
         return '<li class="item"><div class="item__main"><div class="item__text">强度 ' + r.before + ' → ' + r.after + (d > 0 ? '（降 ' + d + '）' : '') + '</div>' +
-          '<div class="item__meta">' + (r.need && r.need.length ? esc(r.need.join('、')) + ' · ' : '') + fmtDayTime(r.t) + '</div></div></li>';
+          '<div class="item__meta">' + (r.need && r.need.length ? esc(r.need.join('、')) + ' · ' : '') + fmtDayTime(r.t) + '</div></div>' +
+          delBtnHtml('sos', r.id, '着陆') + '</li>';
       }).join('') : emptyItem('还没有着陆记录。');
     }
   }
@@ -1063,8 +1201,7 @@
     if (th) th.value = state.settings.theme || 'auto';
     var mo = $('#setting-motion');
     if (mo) mo.value = state.settings.motion || 'auto';
-    var ex = $('#export-note');
-    if (ex) ex.textContent = state.settings.lastExportAt ? '上次导出：' + fmtDayTime(state.settings.lastExportAt) : '还没有导出过备份。';
+    refreshStorageNote();
   }
 
   /* ---------------- 导出 / 导入 / 清空 ---------------- */
@@ -1125,7 +1262,7 @@
       data: state
     };
     saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8', '已导出 JSON 备份。');
-    renderSettings();
+    renderAll();
   }
 
   function exportMD() {
@@ -1205,6 +1342,16 @@
       parts.push('旧版备份（无版本信息）');
     }
     if (metaEl) metaEl.textContent = parts.join(' · ');
+    var warn = $('#import-warn');
+    if (warn) {
+      warn.hidden = !pendingImport.warning;
+      warn.textContent = pendingImport.warning || '';
+    }
+    var mergeBtn = $('[data-action="import-merge"]');
+    var overwriteBtn = $('[data-action="import-overwrite"]');
+    var blockedImport = !!pendingImport.blocked || !pendingImport.total;
+    if (mergeBtn) mergeBtn.disabled = blockedImport;
+    if (overwriteBtn) overwriteBtn.disabled = blockedImport;
     var rows = [
       ['反刍', d.rum.length],
       ['确定性', d.cert.length],
@@ -1229,18 +1376,33 @@
         try {
           var parsed = JSON.parse(String(reader.result));
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
+          if (parsed.app && parsed.app !== 'zhuolu') {
+            showToast('这不是着陆台的备份文件。');
+            return;
+          }
           var raw = parsed;
           var meta = null;
+          var warning = '';
+          var blocked = false;
           if (parsed.app === 'zhuolu' && parsed.data && typeof parsed.data === 'object') {
             raw = parsed.data;
             meta = parsed;
+            var sv = Number(parsed.schemaVersion) || 0;
+            if (sv > SCHEMA_VERSION) {
+              warning = '这份备份来自更新版本（格式 v' + sv + '），当前版本可能读不全。建议先升级应用，再导入。';
+              blocked = true;
+            }
           }
           var data = normalize(raw);
+          var total = data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length;
+          if (!total) warning = warning || '这份备份里没有可导入的记录。';
           pendingImport = {
             data: data,
             meta: meta,
             name: f.name,
-            total: data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length
+            total: total,
+            warning: warning,
+            blocked: blocked
           };
           renderImportDialog();
           openOverlay('#import-overlay');
@@ -1259,7 +1421,7 @@
   }
 
   function overwriteImport() {
-    if (!pendingImport) return;
+    if (!pendingImport || pendingImport.blocked) return;
     if (!confirm('覆盖当前全部数据？建议先导出当前备份。')) return;
     state = normalize(pendingImport.data);
     save();
@@ -1272,7 +1434,7 @@
   }
 
   function mergeImport() {
-    if (!pendingImport) return;
+    if (!pendingImport || pendingImport.blocked) return;
     var d = pendingImport.data;
     ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
       state[k] = mergeList(state[k], d[k]);
@@ -1304,6 +1466,8 @@
     var btn = $('#install-btn');
     var badge = $('#install-badge');
     if (!tip || !btn) return;
+    var migrate = $('#install-migrate');
+    if (migrate) migrate.hidden = true;
     if (isLocalFile()) {
       tip.innerHTML = '<b>当前是本地文件</b><span>安装到主屏需要网页版本。你也可以继续直接打开这个文件；数据只在本机。</span>';
       btn.hidden = true;
@@ -1320,6 +1484,7 @@
       tip.innerHTML = '<b>iPhone / iPad</b><span>用 Safari 打开本页 → 点底部「分享」→「添加到主屏幕」→「添加」。</span>';
       btn.hidden = true;
       if (badge) badge.textContent = 'iOS';
+      if (migrate) migrate.hidden = false;
       return;
     }
     var android = /Android/i.test(navigator.userAgent);
@@ -1354,25 +1519,86 @@
 
   function requestPersist() {
     if (!(navigator.storage && navigator.storage.persisted)) {
-      setStorageNote('浏览器没有提供持久化存储接口，请定期导出备份。');
+      persistNote = '浏览器没有提供持久化存储接口，请定期导出备份。';
+      refreshStorageNote();
       return;
     }
     navigator.storage.persisted().then(function (already) {
-      if (already) { setStorageNote('本机存储已持久化；仍建议定期导出备份。'); return null; }
-      if (!navigator.storage.persist) { setStorageNote('浏览器可能自动清理本站数据，请定期导出备份。'); return null; }
+      if (already) { persistNote = '本机存储已持久化'; refreshStorageNote(); return null; }
+      if (!navigator.storage.persist) { persistNote = '浏览器可能自动清理本站数据，请定期导出备份'; refreshStorageNote(); return null; }
       return navigator.storage.persist().then(function (granted) {
-        setStorageNote(granted ? '已申请持久化存储：浏览器不会自动清理本站数据。' : '浏览器暂未授予持久化存储：清理数据会删除记录，请定期导出。');
+        persistNote = granted ? '已申请持久化存储：浏览器不会自动清理' : '未获得持久化存储：清理数据会删除记录，请定期导出';
+        refreshStorageNote();
         return null;
       });
     }).catch(function () {
-      setStorageNote('存储状态未知；请定期导出备份。');
+      persistNote = '存储状态未知；请定期导出备份';
+      refreshStorageNote();
+    });
+  }
+
+  var swWaiting = null;
+  var updateDismissed = false;
+  var reloading = false;
+  var hadController = false;
+
+  function showUpdateBar(show) {
+    var bar = $('#update-bar');
+    if (bar) bar.hidden = !show;
+  }
+
+  function trackInstalling(worker) {
+    if (!worker) return;
+    worker.addEventListener('statechange', function () {
+      if (worker.state !== 'installed') return;
+      if (!navigator.serviceWorker.controller) return;
+      if (updateDismissed) return;
+      swWaiting = worker;
+      showUpdateBar(true);
     });
   }
 
   function initSW() {
     if (!('serviceWorker' in navigator)) return;
     if (!/^https?:$/.test(location.protocol)) return;
-    navigator.serviceWorker.register('sw.js').catch(function () { /* 离线缓存不可用时不影响使用 */ });
+    hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) { hadController = true; return; }
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      trackInstalling(reg.installing);
+      reg.addEventListener('updatefound', function () { trackInstalling(reg.installing); });
+      if (reg.waiting && navigator.serviceWorker.controller && !updateDismissed) {
+        swWaiting = reg.waiting;
+        showUpdateBar(true);
+      }
+      var lastCheck = 0;
+      function checkUpdate() {
+        if (document.visibilityState !== 'visible') return;
+        if (Date.now() - lastCheck < 30 * 60000) return;
+        lastCheck = Date.now();
+        reg.update().catch(function () { /* 忽略：离线或服务器不支持 */ });
+      }
+      document.addEventListener('visibilitychange', checkUpdate);
+      setInterval(checkUpdate, 60 * 60000);
+    }).catch(function () { /* 离线缓存不可用时不影响使用 */ });
+  }
+
+  function applyUpdate() {
+    showUpdateBar(false);
+    if (swWaiting) {
+      swWaiting.postMessage({ type: 'SKIP_WAITING' });
+      return;
+    }
+    location.reload();
+  }
+
+  function dismissUpdate() {
+    updateDismissed = true;
+    showUpdateBar(false);
   }
 
   window.addEventListener('beforeinstallprompt', function (e) {
@@ -1407,6 +1633,7 @@
   function renderAll() {
     renderTopbar();
     renderHome();
+    renderBackupNudge();
     renderWindow();
     renderRum();
     renderCert();
@@ -1471,13 +1698,20 @@
     'it-again': function () { resetIntercept(); showITStep(1); },
     'save-cert': saveCert,
     'clear-cert': function () { clearCertFields(); showToast('已清空输入。'); },
-    'del-cert': function (el) {
-      var id = el.getAttribute('data-id');
-      state.cert = state.cert.filter(function (c) { return c.id !== id; });
-      save();
-      renderCert();
-      renderRecords();
+    'del-record': function (el) {
+      removeRecord(el.getAttribute('data-kind'), el.getAttribute('data-id'));
     },
+    'del-cert': function (el) {
+      removeRecord('cert', el.getAttribute('data-id'));
+    },
+    'dismiss-backup-nudge': function () {
+      state.settings.nudgeSnoozeUntil = Date.now() + NUDGE_SNOOZE_MS;
+      save();
+      renderBackupNudge();
+      showToast('好，3 天后再提醒。');
+    },
+    'apply-update': applyUpdate,
+    'dismiss-update': dismissUpdate,
     'save-tr': saveTR,
     'save-sleep': saveSleep,
     'save-support': saveSupport,
@@ -1628,6 +1862,14 @@
   function init() {
     applyTheme();
     initRanges();
+    var toastBtn = $('#toast-action');
+    if (toastBtn) {
+      toastBtn.addEventListener('click', function () {
+        var fn = toastAction;
+        hideToast();
+        if (fn) fn();
+      });
+    }
     renderAll();
     updateInstallUI();
     requestPersist();

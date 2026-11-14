@@ -76,6 +76,17 @@
 
       <div class="mini-stats" id="home-stats"></div>
       <div class="mini-stats" id="home-window" hidden></div>
+
+      <div class="nudge" id="backup-nudge" hidden>
+        <div class="nudge__body">
+          <p class="nudge__title" id="backup-nudge-title">该备份一下了</p>
+          <p class="nudge__text" id="backup-nudge-text"></p>
+        </div>
+        <div class="nudge__actions">
+          <button class="btn btn--ghost btn--sm" data-action="export-json">导出备份</button>
+          <button class="btn btn--quiet btn--sm" data-action="dismiss-backup-nudge">以后再说</button>
+        </div>
+      </div>
     </section>
 
     <!-- ============ 反刍 ============ -->
@@ -378,7 +389,7 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2 class="h3">数据与设置</h2></div>
+        <div class="card-head"><h2 class="h3">数据与设置</h2><span class="badge" id="backup-badge" hidden>建议备份</span></div>
         <div class="data-actions">
           <button class="btn btn--ghost btn--sm" data-action="export-json">导出 JSON</button>
           <button class="btn btn--ghost btn--sm" data-action="export-md">导出 Markdown</button>
@@ -404,6 +415,10 @@
         <div class="card-head"><h2 class="h3">安装到设备</h2><span class="badge" id="install-badge">PWA</span></div>
         <p class="small muted">装好后从桌面图标打开：全屏、离线可用；数据仍然只存在本机。</p>
         <div class="install-tip small mt-12" id="install-tip"></div>
+        <div class="install-migrate" id="install-migrate" hidden>
+          <b>先导出，再安装。</b>
+          <span>iPhone 装到主屏后是一个独立的存储空间，Safari 里现在的记录不会自动带过去。先「导出 JSON」，装好后再用「导入 JSON」接上。</span>
+        </div>
         <div class="actions-row mt-16 mb-0">
           <button class="btn btn--primary btn--sm" data-action="install-app" id="install-btn" hidden>安装到这台设备</button>
         </div>
@@ -415,7 +430,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.2.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.2.1 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -645,6 +660,7 @@
     <div class="panel__body">
       <h2 class="h2" id="import-title">发现一份备份。</h2>
       <p class="small muted import-file" id="import-meta"></p>
+      <p class="import-warn small" id="import-warn" hidden></p>
       <div class="import-counts" id="import-counts"></div>
       <p class="small muted">合并：把备份里的记录追加到当前数据，同一条不会重复。覆盖：替换当前全部数据。</p>
       <p class="small muted mt-12">导入前建议先导出当前备份。导入后可以继续在「更多 → 导出」里备份。</p>
@@ -657,7 +673,13 @@
   </div>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="update-bar" id="update-bar" hidden>
+  <span class="update-bar__text">有新版本可用</span>
+  <button class="btn btn--primary btn--sm" data-action="apply-update">更新</button>
+  <button class="icon-btn update-bar__close" data-action="dismiss-update" aria-label="稍后更新">×</button>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-msg"></span><button class="toast__action" id="toast-action" hidden></button></div>
 
 <!-- ============ 打印口袋卡 ============ -->
 <div class="pocket print-only" id="pocket">
