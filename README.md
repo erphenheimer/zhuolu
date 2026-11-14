@@ -10,7 +10,7 @@
 
 ## 使用
 
-**在线版（PWA，可装到主屏 / 桌面）**：把仓库根目录部署到任意 HTTPS 静态托管（Cloudflare Pages、Netlify、Vercel 等），打开网址后按提示安装。仓库根目录已包含 PWA 需要的 `manifest.webmanifest`、`sw.js` 和 `icons/`。
+**在线版（PWA，可装到主屏 / 桌面）**：部署在 Cloudflare Pages，打开网页后按提示安装。自己搭一份也很简单，见下面「本地运行」与 [HOSTING.md](HOSTING.md)。
 
 - iPhone / iPad：用 Safari 打开 → 点「分享」→「添加到主屏幕」
 - Android：用 Chrome 打开 → 右上角菜单 →「安装应用」/「添加到主屏幕」
@@ -49,13 +49,32 @@
 
 如果已被诊断为焦虑障碍、适应障碍或其他精神科问题，这个工具最多是日常辅助，治疗计划请跟医生 / 咨询师走。持续两周以上情绪低落或焦虑、睡眠明显受损、无法学习工作、回避越来越多，请优先寻求专业帮助。
 
+## 本地运行
+
+需要 Node.js 18+（只用来起服务和构建，应用本身不依赖任何运行时）。
+
+```bash
+git clone https://github.com/erphenheimer/zhuolu.git
+cd zhuolu
+npm start          # 起本地服务并打印地址，默认 http://127.0.0.1:4173/
+```
+
+`localhost` 属于安全上下文，所以在本地就能完整验证 Service Worker、离线启动和安装提示，不需要证书。
+
+- `npm start` 默认服务 `dist/`（存在时），否则服务仓库根目录
+- `npm start -- --lan` 让手机通过局域网访问（仅用于看排版；http 下不会注册 Service Worker）
+- `npm start -- --open` 顺便打开浏览器
+
 ## 开发
 
 ```bash
-node build.mjs   # 把 src/ 合成单文件 index.html
+npm run build      # src/ → 单文件 index.html
+npm run pack       # 构建 + 生成可直接部署的 dist/
+npm test           # Playwright 回归测试（需要 python + playwright）
+npm run deploy     # 部署到 Cloudflare Pages（需要 token，见 HOSTING.md）
 ```
 
-`index.html` 是生成物，不要直接改；改 `src/` 下的源文件。在线安装版还需要同目录的 `manifest.webmanifest`、`sw.js` 和 `icons/`。配色与设计变量在 `src/style.css` 顶部。
+`index.html` 和 `dist/` 都是生成物，不要直接改；改 `src/` 下的源文件。配色与设计变量在 `src/style.css` 顶部。`_headers` 是 CSP 与缓存策略，本地服务器和线上都会应用同一份。
 
 ## 版本
 

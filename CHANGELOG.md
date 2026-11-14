@@ -1,5 +1,16 @@
 # Changelog
 
+## 未发布 — 工程
+
+不改变应用行为，只让项目能跑起来、能部署、能被验证。
+
+- 新增 `package.json`：`npm start` 起本地服务、`npm run pack` 出 `dist/`、`npm test` 跑回归、`npm run deploy` 部署
+- 新增 `tools/serve.mjs`：零依赖静态服务器，读取 `_headers` 并应用与线上一致的响应头，`localhost` 下可直接验证 Service Worker、离线启动与安装提示
+- 新增 `tools/pack.mjs`：构建 → 只把运行时文件复制进 `dist/`（源码与工具不进部署），并做版本一致性自检（`APP_VERSION` 与 `sw.js` 的 `CACHE` 必须匹配）、manifest 图标与 SW 预缓存清单的存在性自检
+- 新增 `tools/deploy.mjs`：上传 Cloudflare Pages 并做线上自检（状态码、CSP 响应头、SW / manifest / 图标 MIME），无 token 时打印一步一步的指引后退出
+- 新增 `_headers`：CSP（`default-src 'none'`，只允许本站脚本、样式、图标）、`nosniff`、禁止被嵌入、`no-referrer`、权限策略、缓存策略
+- 新增 `HOSTING.md`：托管边界（只用平台免费子域、不碰任何域名、只允许一个平台）、部署步骤、上线自检清单、回滚方式
+
 ## 0.3.0 — 2026-11-14
 
 - 新增「回顾」页：近 7 / 30 天的着陆强度折线（日均）、每天做到几件柱状、反刍次数柱状

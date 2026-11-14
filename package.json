@@ -1,0 +1,18 @@
+{
+  "name": "zhuolu",
+  "version": "0.3.0",
+  "private": true,
+  "description": "着陆台 · 本地、离线、无账号的中文情绪危机自助工作台",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "pack": "node tools/pack.mjs",
+    "dev": "node tools/serve.mjs",
+    "start": "node tools/serve.mjs",
+    "test": "python tools/qa.py",
+    "deploy": "node tools/deploy.mjs"
+  }
+}
