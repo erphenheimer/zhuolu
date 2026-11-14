@@ -1,7 +1,7 @@
 /* 着陆台 PWA Service Worker
  * 只缓存本应用自己的文件：不联网、不上传、不缓存第三方资源。
  */
-var CACHE = 'zhuolu-v0.2.1';
+var CACHE = 'zhuolu-v0.3.0';
 var ASSETS = [
   './',
   './index.html',

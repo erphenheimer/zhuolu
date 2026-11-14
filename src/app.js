@@ -6,9 +6,9 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.2.1';
+  var APP_VERSION = '0.3.0';
   var SCHEMA_VERSION = 1;
-  var ROUTES = ['now', 'rumination', 'certainty', 'today', 'more'];
+  var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', others: '猜别人的想法或结果', her: '猜别人的想法或结果', other: '说不清' };
   var REC_LABEL = { sos: '着陆', rum: '反刍', cert: '确定性', tr: '思维记录', sleep: '睡前' };
@@ -26,6 +26,12 @@
     });
   }
   function clamp(n, a, b) { n = Number(n); if (isNaN(n)) n = a; return Math.max(a, Math.min(b, n)); }
+  function avg(arr) {
+    if (!arr || !arr.length) return 0;
+    var s = 0;
+    arr.forEach(function (v) { s += v; });
+    return s / arr.length;
+  }
   function dayKey(d) {
     d = d || new Date();
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -91,14 +97,30 @@
     }
   }
 
+  var lastStorageToast = 0;
+
+  function storageFailed() {
+    storageOK = false;
+    renderStorageAlert();
+    var now = Date.now();
+    if (now - lastStorageToast > 20000) {
+      lastStorageToast = now;
+      try { showToast('这次修改没有保存。先导出备份，或换一个浏览器。'); } catch (err) { /* ignore */ }
+    }
+  }
+
   function save() {
-    if (!storageOK) return;
+    if (!storageOK) { storageFailed(); return; }
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
-      storageOK = false;
-      try { showToast('浏览器没能保存，建议导出备份。'); } catch (err) { /* ignore */ }
+      storageFailed();
     }
+  }
+
+  function renderStorageAlert() {
+    var el = $('#storage-alert');
+    if (el) el.hidden = storageOK;
   }
 
   var state = load();
@@ -112,6 +134,8 @@
     var t = state.settings.theme || 'auto';
     var dark = t === 'dark' || (t === 'auto' && mqDark && mqDark.matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#141410' : '#f2eee3');
     var m = state.settings.motion || 'auto';
     var reduce = m === 'reduce' || (m === 'auto' && mqReduce && mqReduce.matches);
     document.documentElement.setAttribute('data-motion', reduce ? 'reduce' : 'full');
@@ -258,13 +282,18 @@
 
   function renderHome() {
     var st = weekStats();
-    var s = streak();
+    var act = activityDays();
+    var active7 = 0;
+    Object.keys(act).forEach(function (k) {
+      var d = new Date(k + 'T00:00:00');
+      if (!isNaN(d.getTime()) && Date.now() - d.getTime() < 7 * 86400000) active7++;
+    });
     var parts = [];
     if (st.sos) parts.push('<span><b>' + st.sos + '</b>次着陆（近 7 天）</span>');
     if (st.rum) parts.push('<span><b>' + st.rum + '</b>次反刍登记</span>');
     if (st.n >= 2) parts.push('<span>着陆后平均降 <b>' + st.drop.toFixed(1) + '</b> 分</span>');
-    if (s >= 2) parts.push('<span>连续记录 <b>' + s + '</b> 天</span>');
-    if (!parts.length) parts.push('<span>还没有记录。难受的时候，按上面那个大按钮就行。</span>');
+    if (active7 >= 2) parts.push('<span>最近 7 天有 <b>' + active7 + '</b> 天记过东西</span>');
+    if (!parts.length) parts.push('<span>还没有记录。难受的时候，按上面那个按钮就行。</span>');
     var el = $('#home-stats');
     if (el) el.innerHTML = parts.join('');
 
@@ -354,7 +383,8 @@
   function refreshStorageNote() {
     var bytes = stateBytes();
     var parts = [];
-    if (persistNote) parts.push(persistNote);
+    if (!storageOK) parts.push('当前浏览器不允许本地存储：记录只在本次打开有效，请立即导出');
+    else if (persistNote) parts.push(persistNote);
     if (bytes > 0) parts.push('本机数据约 ' + fmtBytes(bytes) + ' / 浏览器上限约 5 MB');
     if (bytes > 4194304) parts.push('空间快满了，建议导出后清理旧记录。');
     setStorageNote(parts.join(' · '));
@@ -570,6 +600,22 @@
   };
 
   var lastFocus = null;
+  var FOCUS_SEL = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function overlayFocusables(overlay) {
+    return $$(FOCUS_SEL, overlay).filter(function (el) {
+      return el.getClientRects().length > 0;
+    });
+  }
+
+  function setBackgroundInert(on) {
+    ['.skip', '.rail', '.shell', '.bottom-nav'].forEach(function (sel) {
+      var el = $(sel);
+      if (!el) return;
+      if (on) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
+      else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+    });
+  }
 
   function openOverlay(id) {
     lastFocus = document.activeElement;
@@ -577,6 +623,8 @@
     if (!o) return;
     o.hidden = false;
     document.body.classList.add('is-locked');
+    setBackgroundInert(true);
+    hideToast();
     var c = $('.panel__close', o);
     if (c) setTimeout(function () { c.focus(); }, 40);
   }
@@ -589,8 +637,20 @@
     var o = $(id);
     if (!o) return;
     o.hidden = true;
-    if (!anyOverlayOpen()) document.body.classList.remove('is-locked');
+    if (!anyOverlayOpen()) {
+      document.body.classList.remove('is-locked');
+      setBackgroundInert(false);
+    }
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* ignore */ } }
+  }
+
+  function focusStepHeading(overlay, n, attr) {
+    var step = $('[data-' + attr + '="' + n + '"]', overlay);
+    if (!step) return;
+    var h = step.querySelector('h2');
+    if (!h) return;
+    h.setAttribute('tabindex', '-1');
+    setTimeout(function () { try { h.focus({ preventScroll: true }); } catch (e) { h.focus(); } }, 30);
   }
 
   function showSOSStep(n) {
@@ -610,6 +670,7 @@
       dot.classList.toggle('is-on', i === Math.min(3, n - 1));
       dot.classList.toggle('is-done', i < Math.min(4, n - 1));
     });
+    focusStepHeading(overlay, n, 'sos-step');
   }
 
   function resetBreathingUI() {
@@ -811,6 +872,7 @@
       dot.classList.toggle('is-on', i === Math.min(2, n - 1));
       dot.classList.toggle('is-done', i < Math.min(3, n - 1));
     });
+    focusStepHeading(overlay, n, 'it-step');
   }
 
   function resetIntercept() {
@@ -862,8 +924,8 @@
     var done = $('#it-done-text');
     if (done) {
       var extra = (it.kind === 'others' || it.kind === 'her') ? '它现在属于不可知区，先存放。' : '如果还想继续，把它留到担忧窗口。';
-      done.innerHTML = '今天它出现了第 <b>' + count + '</b> 次。' + extra +
-        (count >= 3 ? '<br><span class="muted">今天已经第 ' + count + ' 次了。重复出现不是新证据。</span>' : '');
+      done.innerHTML = '它今天来过 <b>' + count + '</b> 次。' + extra +
+        (count >= 3 ? '<br><span class="muted">次数多，不代表它更真。</span>' : '');
     }
     renderAll();
     showITStep(3);
@@ -962,7 +1024,7 @@
     });
     var done = CHECKS.filter(function (c) { return d[c]; }).length;
     var p = $('#today-progress');
-    if (p) p.textContent = done + ' / 5';
+    if (p) p.textContent = done ? '已做到 ' + done + ' 件' : '还没开始';
     var week = $('#week');
     if (week) {
       var html = '';
@@ -1056,6 +1118,326 @@
     if (!el) return;
     if (!state.sleep.length) { el.textContent = ''; return; }
     el.textContent = '上次收工：' + fmtDayTime(state.sleep[0].t);
+  }
+
+  /* ---------------- 回顾 ---------------- */
+
+  var reviewDays = 7;
+
+  function reviewDayList(days) {
+    var out = [];
+    var base = startOfDay();
+    for (var i = days - 1; i >= 0; i--) {
+      var d = new Date(base - i * 86400000);
+      out.push({ key: dayKey(d), d: d });
+    }
+    return out;
+  }
+
+  function buildReviewData(days) {
+    var list = reviewDayList(days);
+    var since = list[0].d.getTime();
+    var byKey = {};
+    list.forEach(function (item) {
+      byKey[item.key] = { key: item.key, d: item.d, sosCount: 0, before: [], after: [], rum: 0, done: 0 };
+    });
+    state.sos.forEach(function (r) {
+      if (!r || !r.t) return;
+      var b = byKey[dayKey(new Date(r.t))];
+      if (!b) return;
+      b.sosCount++;
+      if (typeof r.before === 'number') b.before.push(r.before);
+      if (typeof r.after === 'number') b.after.push(r.after);
+    });
+    state.rum.forEach(function (r) {
+      if (!r || !r.t) return;
+      var b = byKey[dayKey(new Date(r.t))];
+      if (b) b.rum++;
+    });
+    var checkDone = 0, checkTotal = 0, checkDays = 0, fullDays = 0;
+    list.forEach(function (item) {
+      var dd = state.daily[item.key];
+      var b = byKey[item.key];
+      var n = 0;
+      if (dd && typeof dd === 'object') {
+        CHECKS.forEach(function (c) { if (dd[c]) n++; });
+      }
+      b.done = n;
+      checkDone += n;
+      checkTotal += CHECKS.length;
+      if (n > 0) checkDays++;
+      if (n >= 3) fullDays++;
+    });
+    var sosCount = 0, beforeSum = 0, beforeN = 0, afterSum = 0, afterN = 0;
+    var deltaSum = 0, deltaN = 0, activeSosDays = 0;
+    var rumCount = 0, activeRumDays = 0;
+    list.forEach(function (item) {
+      var b = byKey[item.key];
+      sosCount += b.sosCount;
+      if (b.sosCount) activeSosDays++;
+      b.before.forEach(function (v) { beforeSum += v; beforeN++; });
+      b.after.forEach(function (v) { afterSum += v; afterN++; });
+      if (b.before.length && b.after.length) {
+        var n = Math.min(b.before.length, b.after.length);
+        for (var i = 0; i < n; i++) { deltaSum += b.before[i] - b.after[i]; deltaN++; }
+      }
+      if (b.rum) { rumCount += b.rum; activeRumDays++; }
+    });
+    var prevSince = since - days * 86400000;
+    var prevSos = state.sos.filter(function (r) { return r && r.t >= prevSince && r.t < since; }).length;
+    var prevRum = state.rum.filter(function (r) { return r && r.t >= prevSince && r.t < since; }).length;
+    return {
+      days: days,
+      list: list,
+      byKey: byKey,
+      sosCount: sosCount,
+      beforeAvg: beforeN ? beforeSum / beforeN : 0,
+      afterAvg: afterN ? afterSum / afterN : 0,
+      deltaAvg: deltaN ? deltaSum / deltaN : null,
+      activeSosDays: activeSosDays,
+      rumCount: rumCount,
+      activeRumDays: activeRumDays,
+      checkDone: checkDone,
+      checkTotal: checkTotal,
+      checkDays: checkDays,
+      fullDays: fullDays,
+      prevSos: prevSos,
+      prevRum: prevRum
+    };
+  }
+
+  function reviewXLabels(data) {
+    var labels = [];
+    if (data.days <= 7) {
+      data.list.forEach(function (item, i) {
+        labels.push({ i: i, text: WEEK[item.d.getDay()] + ' ' + item.d.getDate() });
+      });
+    } else {
+      data.list.forEach(function (item, i) {
+        if (i === 0 || i === data.list.length - 1 || i % 5 === 0) {
+          labels.push({ i: i, text: (item.d.getMonth() + 1) + '/' + item.d.getDate() });
+        }
+      });
+    }
+    return labels;
+  }
+
+  function svgLineChart(host, data) {
+    var w = chartWidth(host);
+    var h = 170;
+    var padL = 26, padR = 10, padT = 14, padB = 26;
+    var plotW = w - padL - padR;
+    var plotH = h - padT - padB;
+    var days = data.days;
+    function x(i) { return padL + (days <= 1 ? plotW / 2 : (i / (days - 1)) * plotW); }
+    function y(v) { return padT + (1 - v / 10) * plotH; }
+
+    var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="presentation" focusable="false">';
+    [0, 5, 10].forEach(function (v) {
+      svg += '<line class="chart__grid" x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y(v).toFixed(1) + '"></line>';
+      svg += '<text class="chart__axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+    });
+    reviewXLabels(data).forEach(function (lb) {
+      svg += '<text class="chart__axis" x="' + x(lb.i).toFixed(1) + '" y="' + (h - 8) + '" text-anchor="middle">' + lb.text + '</text>';
+    });
+
+    function drawSeries(values, cls, dotCls) {
+      var segs = [], cur = [];
+      values.forEach(function (v, i) {
+        if (v == null) { if (cur.length) { segs.push(cur); cur = []; } return; }
+        cur.push([i, v]);
+      });
+      if (cur.length) segs.push(cur);
+      var out = '';
+      segs.forEach(function (seg) {
+        if (seg.length > 1) {
+          out += '<polyline class="chart__line ' + cls + '" points="' + seg.map(function (pt) {
+            return x(pt[0]).toFixed(1) + ',' + y(pt[1]).toFixed(1);
+          }).join(' ') + '"></polyline>';
+        }
+        seg.forEach(function (pt) {
+          var d = data.list[pt[0]].d;
+          out += '<circle class="chart__dot ' + dotCls + '" cx="' + x(pt[0]).toFixed(1) + '" cy="' + y(pt[1]).toFixed(1) +
+            '" r="' + (days <= 7 ? 2.8 : 2) + '"><title>' + (d.getMonth() + 1) + '月' + d.getDate() + '日 · ' + pt[1] + '</title></circle>';
+        });
+      });
+      return out;
+    }
+
+    var beforeVals = data.list.map(function (item) {
+      var b = data.byKey[item.key];
+      return b.before.length ? avg(b.before) : null;
+    });
+    var afterVals = data.list.map(function (item) {
+      var b = data.byKey[item.key];
+      return b.after.length ? avg(b.after) : null;
+    });
+    svg += drawSeries(beforeVals, 'chart__line--before', 'chart__dot--before');
+    svg += drawSeries(afterVals, 'chart__line--after', 'chart__dot--after');
+    svg += '</svg>';
+    host.innerHTML = svg;
+  }
+
+  function svgBarChart(host, data, valueOf, maxY) {
+    var w = chartWidth(host);
+    var h = 148;
+    var padL = 26, padR = 10, padT = 12, padB = 24;
+    var plotW = w - padL - padR;
+    var plotH = h - padT - padB;
+    var bars = data.list.map(function (item) {
+      return { i: data.list.indexOf(item), v: valueOf(data.byKey[item.key], data) };
+    });
+    var maxV = 0;
+    bars.forEach(function (b) { if (b.v > maxV) maxV = b.v; });
+    var top = maxY || Math.max(3, maxV);
+    var slot = plotW / data.days;
+    var barW = Math.min(data.days <= 7 ? 26 : 10, slot * 0.56);
+    function xc(i) { return padL + (i + 0.5) * slot; }
+    function y(v) { return padT + (1 - v / top) * plotH; }
+    var base = y(0);
+
+    var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="presentation" focusable="false">';
+    var ticks = top <= 5 ? [0, top] : [0, Math.round(top / 2), top];
+    ticks.forEach(function (v) {
+      svg += '<line class="chart__grid" x1="' + padL + '" y1="' + y(v).toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y(v).toFixed(1) + '"></line>';
+      svg += '<text class="chart__axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+    });
+    reviewXLabels(data).forEach(function (lb) {
+      svg += '<text class="chart__axis" x="' + xc(lb.i).toFixed(1) + '" y="' + (h - 8) + '" text-anchor="middle">' + lb.text + '</text>';
+    });
+    svg += '<line class="chart__grid" x1="' + padL + '" y1="' + base.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + base.toFixed(1) + '"></line>';
+    bars.forEach(function (b) {
+      var cx = xc(b.i);
+      var d = data.list[b.i].d;
+      var title = '<title>' + (d.getMonth() + 1) + '月' + d.getDate() + '日 · ' + b.v + '</title>';
+      if (b.v <= 0) {
+        svg += '<rect class="chart__bar is-zero" x="' + (cx - barW / 2).toFixed(1) + '" y="' + (base - 2).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="2" rx="1">' + title + '</rect>';
+      } else {
+        var yv = y(b.v);
+        var full = maxY ? b.v >= maxY : b.v >= maxV;
+        svg += '<rect class="chart__bar' + (full ? ' is-full' : '') + '" x="' + (cx - barW / 2).toFixed(1) + '" y="' + yv.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + Math.max(2, base - yv).toFixed(1) + '" rx="3">' + title + '</rect>';
+      }
+    });
+    var todayIdx = data.list.length - 1;
+    svg += '<line class="chart__today" x1="' + (xc(todayIdx) + slot / 2 - 1).toFixed(1) + '" y1="' + padT + '" x2="' + (xc(todayIdx) + slot / 2 - 1).toFixed(1) + '" y2="' + base.toFixed(1) + '"></line>';
+    svg += '</svg>';
+    host.innerHTML = svg;
+  }
+
+  function chartWidth(host) {
+    var w = host ? Math.round(host.getBoundingClientRect().width) : 0;
+    return w && w > 200 ? w : 600;
+  }
+
+  function renderReviewSummary(data) {
+    var host = $('#review-summary');
+    if (!host) return;
+    var rate = data.checkTotal ? Math.round(data.checkDone / data.checkTotal * 100) : 0;
+    var drop = data.deltaAvg;
+    function stat(v, label, empty) {
+      return '<div class="review-stat' + (empty ? ' is-empty' : '') + '"><b>' + v + '</b><span>' + label + '</span></div>';
+    }
+    host.innerHTML =
+      stat(data.sosCount || '—', '次着陆', !data.sosCount) +
+      stat(drop == null ? '—' : (drop >= 0 ? drop.toFixed(1) : '升 ' + Math.abs(drop).toFixed(1)), '平均降幅（分）', drop == null) +
+      stat(data.rumCount || '—', '次反刍', !data.rumCount) +
+      stat(data.checkDone ? rate + '%' : '—', '打卡完成率', !data.checkDone);
+  }
+
+  function reviewNotes(data) {
+    var days = data.days;
+    var notes = [];
+    if (data.sosCount) {
+      notes.push('这 ' + days + ' 天着陆 <b>' + data.sosCount + '</b> 次，着陆前平均 <b>' + data.beforeAvg.toFixed(1) + '</b>，着陆后平均 <b>' + data.afterAvg.toFixed(1) + '</b>' +
+        (data.deltaAvg != null ? '，平均降 <b>' + data.deltaAvg.toFixed(1) + '</b> 分。' : '。'));
+      var diff = data.sosCount - data.prevSos;
+      if (Math.abs(diff) >= 2) {
+        notes.push('和上一个 ' + days + ' 天相比，着陆次数' + (diff < 0 ? '少了 <b>' + Math.abs(diff) + '</b> 次' : '多了 <b>' + diff + '</b> 次') + '。次数少不等于更好，只作一个参照。');
+      }
+    } else {
+      notes.push('这 ' + days + ' 天没有着陆记录。难受的时候，按「我现在很难受」就行。');
+    }
+    if (data.rumCount) notes.push('反刍登记 <b>' + data.rumCount + '</b> 次，分布在 <b>' + data.activeRumDays + '</b> 天。');
+    if (data.checkDone) notes.push('打卡完成率 <b>' + Math.round(data.checkDone / data.checkTotal * 100) + '%</b>，有 <b>' + data.fullDays + '</b> 天做到 3 件以上。');
+    if (!data.sosCount && !data.rumCount && !data.checkDone) {
+      notes = ['这段时间还没有记录。做一次着陆、一次打卡，这里就会开始有东西可看。'];
+    }
+    return notes;
+  }
+
+  function renderReview() {
+    var data = buildReviewData(reviewDays);
+    renderReviewSummary(data);
+
+    var legend = $('#legend-sos');
+    if (legend) legend.hidden = !data.sosCount;
+
+    var sosHost = $('#chart-sos');
+    if (sosHost) {
+      if (!data.sosCount) {
+        sosHost.innerHTML = '<p class="chart-empty">这 ' + data.days + ' 天还没有着陆记录。</p>';
+        sosHost.removeAttribute('role');
+        sosHost.removeAttribute('aria-label');
+      } else {
+        svgLineChart(sosHost, data);
+        sosHost.setAttribute('role', 'img');
+        sosHost.setAttribute('aria-label', '着陆强度折线图：近 ' + data.days + ' 天共 ' + data.sosCount + ' 次，着陆前平均 ' + data.beforeAvg.toFixed(1) + '，着陆后平均 ' + data.afterAvg.toFixed(1) + '。');
+      }
+    }
+
+    var checkHost = $('#chart-check');
+    if (checkHost) {
+      if (!data.checkDone) {
+        checkHost.innerHTML = '<p class="chart-empty">这 ' + data.days + ' 天还没有打卡记录。</p>';
+        checkHost.removeAttribute('role');
+        checkHost.removeAttribute('aria-label');
+      } else {
+        svgBarChart(checkHost, data, function (b) { return b.done; }, 5);
+        checkHost.setAttribute('role', 'img');
+        checkHost.setAttribute('aria-label', '每天做到几件的柱状图：近 ' + data.days + ' 天共完成 ' + data.checkDone + ' 件，有 ' + data.checkDays + ' 天有打卡。');
+      }
+    }
+
+    var rumHost = $('#chart-rum');
+    if (rumHost) {
+      if (!data.rumCount) {
+        rumHost.innerHTML = '<p class="chart-empty">这 ' + data.days + ' 天没有反刍登记。</p>';
+        rumHost.removeAttribute('role');
+        rumHost.removeAttribute('aria-label');
+      } else {
+        svgBarChart(rumHost, data, function (b) { return b.rum; }, null);
+        rumHost.setAttribute('role', 'img');
+        rumHost.setAttribute('aria-label', '反刍登记柱状图：近 ' + data.days + ' 天共 ' + data.rumCount + ' 次，分布在 ' + data.activeRumDays + ' 天。');
+      }
+    }
+
+    var notesHost = $('#review-notes');
+    if (notesHost) {
+      notesHost.innerHTML = reviewNotes(data).map(function (n) { return '<li>' + n + '</li>'; }).join('');
+    }
+
+    var homeLink = $('#home-review-link');
+    if (homeLink) homeLink.hidden = recordCount() === 0;
+  }
+
+  function exportReview() {
+    var data = buildReviewData(reviewDays);
+    var lines = ['# 着陆台 · ' + reviewDays + ' 天回顾', '', '导出时间：' + fmtDateFull(new Date()) + ' ' + fmtClock(Date.now()), ''];
+    lines.push('- 着陆：' + data.sosCount + ' 次' + (data.sosCount ? '，平均 ' + data.beforeAvg.toFixed(1) + ' → ' + data.afterAvg.toFixed(1) : ''));
+    lines.push('- 反刍登记：' + data.rumCount + ' 次');
+    lines.push('- 打卡完成率：' + (data.checkTotal ? Math.round(data.checkDone / data.checkTotal * 100) : 0) + '%（' + data.checkDone + ' / ' + data.checkTotal + '）');
+    lines.push('');
+    lines.push('| 日期 | 着陆 | 着陆前 | 着陆后 | 做到几件 | 反刍 |');
+    lines.push('| --- | --- | --- | --- | --- | --- |');
+    data.list.forEach(function (item) {
+      var b = data.byKey[item.key];
+      lines.push('| ' + (item.d.getMonth() + 1) + '/' + item.d.getDate() + ' | ' + b.sosCount + ' | ' +
+        (b.before.length ? avg(b.before).toFixed(1) : '—') + ' | ' +
+        (b.after.length ? avg(b.after).toFixed(1) : '—') + ' | ' + b.done + ' | ' + b.rum + ' |');
+    });
+    lines.push('');
+    lines.push('回顾不是评分；空白的日子也算数。');
+    saveFile('zhuolu-review-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8', '已导出这段回顾。');
   }
 
   /* ---------------- 记录 ---------------- */
@@ -1261,7 +1643,8 @@
       exportedAt: new Date().toISOString(),
       data: state
     };
-    saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8', '已导出 JSON 备份。');
+    saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8',
+      recordCount() ? '已导出 JSON 备份。' : '已导出备份（目前还没有记录）。');
     renderAll();
   }
 
@@ -1272,17 +1655,17 @@
     lines.push('导出时间：' + fmtDateFull(new Date()) + ' ' + fmtClock(Date.now()));
     lines.push('');
     lines.push('## 着陆记录（' + state.sos.length + '）');
-    state.sos.slice(0, 100).forEach(function (r) {
+    state.sos.forEach(function (r) {
       lines.push('- ' + fmtDayTime(r.t) + '：强度 ' + r.before + ' → ' + r.after + (r.need && r.need.length ? '；需要：' + r.need.join('、') : ''));
     });
     lines.push('');
     lines.push('## 反刍登记（' + state.rum.length + '）');
-    state.rum.slice(0, 100).forEach(function (r) {
+    state.rum.forEach(function (r) {
       lines.push('- ' + fmtDayTime(r.t) + ' [' + KIND_LABEL[r.kind] + '] ' + r.thought + (r.action ? '；下一步：' + r.action : ''));
     });
     lines.push('');
     lines.push('## 确定性整理（' + state.cert.length + '）');
-    state.cert.slice(0, 50).forEach(function (c) {
+    state.cert.forEach(function (c) {
       lines.push('- ' + fmtDayTime(c.t));
       if (c.fact) lines.push('  - 事实：' + c.fact);
       if (c.interp) lines.push('  - 解释：' + c.interp);
@@ -1291,13 +1674,13 @@
     });
     lines.push('');
     lines.push('## 思维记录（' + state.tr.length + '）');
-    state.tr.slice(0, 50).forEach(function (r) {
+    state.tr.forEach(function (r) {
       lines.push('- ' + fmtDayTime(r.t) + '：' + r.thought + '（' + r.intensity + ' → ' + r.after + '）');
       if (r.balanced) lines.push('  - 平衡句：' + r.balanced);
     });
     lines.push('');
     lines.push('## 睡前 3 行（' + state.sleep.length + '）');
-    state.sleep.slice(0, 50).forEach(function (r) {
+    state.sleep.forEach(function (r) {
       lines.push('- ' + fmtDayTime(r.t));
       if (r.fact) lines.push('  - 事实：' + r.fact);
       if (r.did) lines.push('  - 做到：' + r.did);
@@ -1631,6 +2014,7 @@
   /* ---------------- 总渲染 ---------------- */
 
   function renderAll() {
+    renderStorageAlert();
     renderTopbar();
     renderHome();
     renderBackupNudge();
@@ -1638,6 +2022,7 @@
     renderRum();
     renderCert();
     renderToday();
+    renderReview();
     renderRecords();
     renderSleepLast();
     renderSupport();
@@ -1717,6 +2102,7 @@
     'save-support': saveSupport,
     'export-json': exportJSON,
     'export-md': exportMD,
+    'export-review': exportReview,
     'import-json': importJSON,
     'close-import': closeImport,
     'import-merge': mergeImport,
@@ -1743,13 +2129,18 @@
     var chip = e.target.closest ? e.target.closest('[data-need]') : null;
     if (chip) {
       chip.classList.toggle('is-on');
+      chip.setAttribute('aria-pressed', chip.classList.contains('is-on') ? 'true' : 'false');
       return;
     }
 
     var kind = e.target.closest ? e.target.closest('#it-kinds [data-kind]') : null;
     if (kind) {
       it.kind = kind.getAttribute('data-kind');
-      $$('#it-kinds .kind-btn').forEach(function (b) { b.classList.toggle('is-on', b === kind); });
+      $$('#it-kinds .kind-btn').forEach(function (b) {
+        var on = b === kind;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
       return;
     }
 
@@ -1763,6 +2154,9 @@
       var dots = $$('.ground-dots i', sense);
       dots.forEach(function (d, i) { d.classList.toggle('is-on', i < n); });
       sense.classList.toggle('is-done', n >= total);
+      var titleEl = sense.querySelector('.ground-row__t b');
+      var baseLabel = titleEl ? titleEl.textContent : '';
+      sense.setAttribute('aria-label', baseLabel + '，已找到 ' + n + ' / ' + total);
       return;
     }
 
@@ -1779,9 +2173,25 @@
     var stepCatBtn = e.target.closest ? e.target.closest('[data-step-cat]') : null;
     if (stepCatBtn) {
       stepCat = stepCatBtn.getAttribute('data-step-cat');
-      $$('#step-chips .chip').forEach(function (c) { c.classList.toggle('is-on', c === stepCatBtn); });
+      $$('#step-chips .chip').forEach(function (c) {
+        var on = c === stepCatBtn;
+        c.classList.toggle('is-on', on);
+        c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
       stepIdx = 0;
       renderToday();
+      return;
+    }
+
+    var rangeBtn = e.target.closest ? e.target.closest('[data-review-range]') : null;
+    if (rangeBtn) {
+      reviewDays = Number(rangeBtn.getAttribute('data-review-range')) === 30 ? 30 : 7;
+      $$('[data-review-range]').forEach(function (btn) {
+        var on = btn === rangeBtn;
+        btn.classList.toggle('is-on', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      renderReview();
       return;
     }
 
@@ -1841,6 +2251,28 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      var open = null;
+      $$('.overlay').forEach(function (o) { if (!o.hidden) open = o; });
+      if (open) {
+        var list = overlayFocusables(open);
+        if (!list.length) return;
+        var first = list[0], last = list[list.length - 1];
+        var active = document.activeElement;
+        if (!open.contains(active)) {
+          e.preventDefault();
+          first.focus();
+          return;
+        }
+        if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
     if (e.key === 'Escape') {
       if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
       if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
@@ -1859,6 +2291,13 @@
     });
   }
 
+  var reviewResizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (currentRoute() !== 'review') return;
+    if (reviewResizeTimer) clearTimeout(reviewResizeTimer);
+    reviewResizeTimer = setTimeout(renderReview, 180);
+  });
+
   function init() {
     applyTheme();
     initRanges();
@@ -1868,6 +2307,16 @@
         var fn = toastAction;
         hideToast();
         if (fn) fn();
+      });
+    }
+    $$('.chip[data-need], #step-chips .chip, #it-kinds .kind-btn').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', btn.classList.contains('is-on') ? 'true' : 'false');
+    });
+    var skip = $('.skip');
+    if (skip) {
+      skip.addEventListener('click', function () {
+        var m = $('#main');
+        if (m) setTimeout(function () { try { m.focus(); } catch (e) { /* ignore */ } }, 0);
       });
     }
     renderAll();
@@ -1880,7 +2329,7 @@
       renderRoute();
     }
     if (!storageOK) {
-      setTimeout(function () { showToast('这个浏览器不能本地保存，记录只在本次打开有效。'); }, 900);
+      setTimeout(function () { showToast('这个浏览器不能保存记录：关掉页面就会消失，先导出。'); }, 900);
     }
     setInterval(updateWindowTimer, 1000);
   }

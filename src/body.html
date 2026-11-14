@@ -10,6 +10,7 @@
     <a class="nav-item" href="#/rumination" data-route="rumination"><span class="nav-k">02</span><span>反刍<span class="nav-d">登记、推迟、打断</span></span></a>
     <a class="nav-item" href="#/certainty" data-route="certainty"><span class="nav-k">03</span><span>确定性<span class="nav-d">事实 / 解释 / 不可知</span></span></a>
     <a class="nav-item" href="#/today" data-route="today"><span class="nav-k">04</span><span>今日<span class="nav-d">做到一件就成立</span></span></a>
+    <a class="nav-item" href="#/review" data-route="review"><span class="nav-k">05</span><span>回顾<span class="nav-d">只看趋势，不看单日</span></span></a>
   </nav>
   <div class="rail__foot">
     <button class="btn btn--primary btn--sm" data-action="open-sos">我现在很难受</button>
@@ -23,10 +24,15 @@
     <div class="mobile-brand"><span class="brand-mark" aria-hidden="true"></span><b>着陆台</b></div>
     <div class="topbar__brand"><b>着陆台</b><span id="topbar-date"></span></div>
     <div class="topbar__spacer"></div>
-    <button class="btn btn--ghost btn--sm" data-action="open-sos">应急着陆</button>
+    <button class="btn btn--ghost btn--sm" data-action="open-sos">我现在很难受</button>
   </header>
 
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
+
+    <div class="alert" id="storage-alert" hidden role="alert">
+      <b>这个浏览器现在不能保存记录。</b>
+      <span>这次打开写下的东西，关掉页面就会消失。请立即导出，或换一个浏览器打开。</span>
+    </div>
 
     <!-- ============ 现在 ============ -->
     <section class="view is-active" data-view="now">
@@ -75,6 +81,7 @@
       </div>
 
       <div class="mini-stats" id="home-stats"></div>
+      <a class="link home-review" href="#/review" id="home-review-link" hidden>看这段时间的变化 →</a>
       <div class="mini-stats" id="home-window" hidden></div>
 
       <div class="nudge" id="backup-nudge" hidden>
@@ -208,7 +215,7 @@
       </header>
 
       <div class="card">
-        <div class="card-head"><h2 class="h3">今日三件套</h2><span class="badge" id="today-progress">0 / 5</span></div>
+        <div class="card-head"><h2 class="h3">今天的小事</h2><span class="badge" id="today-progress">还没开始</span></div>
         <div class="check-list" id="today-checks">
           <button class="check-row" data-check="sleep" role="checkbox" aria-checked="false">
             <span class="check-box"><svg viewBox="0 0 16 16"><path d="M3 8.5 6.2 12 13 4.5"></path></svg></span>
@@ -272,8 +279,53 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2 class="h3">最近 7 天</h2><span class="badge">每天做到几件</span></div>
+        <div class="card-head"><h2 class="h3">最近 7 天</h2><a class="link small" href="#/review">回顾 →</a></div>
         <div class="week" id="week"></div>
+      </div>
+    </section>
+
+    <!-- ============ 回顾 ============ -->
+    <section class="view" data-view="review">
+      <header class="view-head">
+        <p class="eyebrow">回顾</p>
+        <h1 class="h1">看趋势，<br>不看单日。</h1>
+        <p class="lede">这里只把已经记录的东西画出来：着陆前后、每天做到几件、反刍几次。只在本机计算，不上传。</p>
+      </header>
+
+      <div class="review-range" role="tablist" aria-label="时间范围">
+        <button class="chip is-on" data-review-range="7" role="tab" aria-selected="true">近 7 天</button>
+        <button class="chip" data-review-range="30" role="tab" aria-selected="false">近 30 天</button>
+      </div>
+
+      <div class="review-summary" id="review-summary"></div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">着陆强度</h2><span class="badge">日均 · 0 – 10</span></div>
+        <figure class="chart" id="chart-sos"></figure>
+        <div class="chart-legend" id="legend-sos">
+          <span class="legend-item legend-item--before">着陆前</span>
+          <span class="legend-item legend-item--after">着陆后</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">每天做到几件</h2><span class="badge">0 – 5</span></div>
+        <figure class="chart" id="chart-check"></figure>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="h3">反刍登记</h2><span class="badge">次 / 天</span></div>
+        <figure class="chart" id="chart-rum"></figure>
+      </div>
+
+      <div class="card card--quiet">
+        <div class="card-head"><h2 class="h3">这段时间</h2></div>
+        <ul class="review-notes" id="review-notes"></ul>
+      </div>
+
+      <div class="review-footnote">
+        <p class="small muted">回顾不是评分。空白的日子也算数——恢复不是直线。</p>
+        <button class="btn btn--ghost btn--sm" data-action="export-review">导出这段回顾</button>
       </div>
     </section>
 
@@ -341,7 +393,7 @@
         </details></div>
         <div class="acc"><details>
           <summary><span class="acc-k">05</span>焦虑发作时，身体在做什么<span class="acc-plus">+</span></summary>
-          <div class="acc-body"><p>心跳加快、呼吸变浅、手抖、出汗、胃里翻、脑子空白——这些是交感神经在把身体调成“应对危险”的状态。它很难受，但本身通常不会伤害你。</p><p>延长呼气、把注意力放到脚底和手心的触感，能让这套反应慢慢退下去。如果出现胸痛、晕厥、持续心悸，仍然要先看医生排除身体问题。</p></div>
+          <div class="acc-body"><p>心跳加快、呼吸变浅、手抖、出汗、胃里翻、脑子空白——这些是交感神经在把身体调成“应对危险”的状态。它很难受，但本身通常不会伤害你。</p><p>延长呼气、把注意力放到脚底和手心的触感，能让这套反应慢慢退下去。如果是第一次出现、或和平时不一样，找医生看一眼更稳妥；现在不用先判断它是不是身体问题。</p></div>
         </details></div>
         <div class="acc"><details>
           <summary><span class="acc-k">06</span>恢复不是直线<span class="acc-plus">+</span></summary>
@@ -353,7 +405,7 @@
         </details></div>
         <div class="acc"><details>
           <summary><span class="acc-k">08</span>现在先别做的五件事<span class="acc-plus">+</span></summary>
-          <div class="acc-body"><p>一，反复查消息、记录或细节找线索；二，反复看相关人的动态或页面；三，找不同的人一遍遍求证；四，深夜喝酒或情绪高点做决定；五，用一个不可逆的大动作来证明自己没事。</p><p>它们都能短暂止痛，但都会把反刍喂大。</p></div>
+          <div class="acc-body"><p>这几件事现在特别顺手，也特别容易把反刍喂大：反复查消息或细节找线索；反复看相关人的动态；找不同的人一遍遍求证；深夜喝酒，或在情绪高点做决定；用一个不可逆的大动作来证明自己没事。</p><p>如果发现自己正在做其中一件，停一下就好，不用责怪自己。</p></div>
         </details></div>
         
         <div class="acc"><details>
@@ -380,9 +432,9 @@
       <div class="card">
         <div class="card-head"><h2 class="h3">如果现在很危险</h2><span class="badge badge--clay">不用犹豫</span></div>
         <div class="crisis-lines">
-          <div class="crisis-line"><b>12356</b><span>全国心理援助热线 · 各地接听</span></div>
-          <div class="crisis-line"><b>010-82951332</b><span>北京市心理援助热线 · 24 小时</span></div>
-          <div class="crisis-line"><b>120 / 110</b><span>有立即危险时</span></div>
+          <div class="crisis-line"><a class="crisis-num" href="tel:12356">12356</a><span>全国心理援助热线 · 各地接听</span></div>
+          <div class="crisis-line"><a class="crisis-num" href="tel:+861082951332">010-82951332</a><span>北京市心理援助热线 · 24 小时</span></div>
+          <div class="crisis-line"><span class="crisis-nums"><a class="crisis-num" href="tel:120">120</a> <span class="crisis-sep">/</span> <a class="crisis-num" href="tel:110">110</a></span><span>有立即危险时</span></div>
         </div>
         <p class="small muted mt-12">如果身边有人，直接告诉对方：“我现在状态不好，能不能陪我一会儿。”这句话比解释有效。</p>
         <p class="small muted mt-12">不在中国大陆？拨打当地紧急电话，或在 <a href="https://findahelpline.com" target="_blank" rel="noopener">findahelpline.com</a> 查找本地心理援助热线。</p>
@@ -430,7 +482,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.2.1 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.3.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -578,7 +630,7 @@
         <h2 class="h2">着陆完成。</h2>
         <p class="lede">你没有解决任何问题，也不需要。强度从 <b id="sos-delta-before">7</b> 到 <b id="sos-delta-after">5</b>。<span class="delta" id="sos-delta"></span></p>
         <div class="answer-card mt-24"><p><b>接下来只做一件小事。</b>喝水、洗脸、站起来走十步，选一个。做完就可以停。</p></div>
-        <p class="small muted mt-16">如果现在有伤害自己的念头，请直接拨打 <b>12356</b>，或告诉身边的人。这不是打扰。</p>
+        <p class="small muted mt-16">如果现在有伤害自己的念头，请直接拨打 <a href="tel:12356">12356</a>，或告诉身边的人。这不是打扰。</p>
         <div class="step-actions">
           <button class="btn btn--primary" data-action="close-sos">回到工作台</button>
           <button class="btn btn--ghost" data-action="sos-restart">再来一轮</button>
@@ -663,7 +715,7 @@
       <p class="import-warn small" id="import-warn" hidden></p>
       <div class="import-counts" id="import-counts"></div>
       <p class="small muted">合并：把备份里的记录追加到当前数据，同一条不会重复。覆盖：替换当前全部数据。</p>
-      <p class="small muted mt-12">导入前建议先导出当前备份。导入后可以继续在「更多 → 导出」里备份。</p>
+      <p class="small muted mt-12">导入前建议先导出当前备份。覆盖不会自动保留当前数据。导入后可以继续在「更多 → 导出」里备份。</p>
       <div class="step-actions">
         <button class="btn btn--primary" data-action="import-merge">合并</button>
         <button class="btn btn--ghost" data-action="import-overwrite">覆盖当前数据</button>
