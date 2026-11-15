@@ -523,7 +523,7 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   align-items: baseline;
 }
 .field .hint { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
-input[type="text"], input[type="time"], textarea, select {
+input[type="text"], input[type="time"], input[type="password"], input[type="url"], textarea, select {
   width: 100%;
   font: inherit;
   font-size: 15px;
@@ -536,7 +536,8 @@ input[type="text"], input[type="time"], textarea, select {
   transition: border-color .18s var(--ease), background .18s var(--ease);
 }
 textarea { resize: vertical; min-height: 84px; }
-input[type="text"]:focus, input[type="time"]:focus, textarea:focus, select:focus {
+input[type="text"]:focus, input[type="time"]:focus, input[type="password"]:focus,
+input[type="url"]:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--sage);
   background: var(--surface);
@@ -1256,9 +1257,12 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 @media print {
   html, body { background: #fff !important; }
   body::before, .rail, .shell, .bottom-nav, .overlay, .toast { display: none !important; }
-  .print-only { display: block !important; }
-  .pocket { display: block !important; page-break-inside: avoid; }
+  .print-only { display: none !important; }
+  body:not([data-print]) #pocket,
+  body[data-print="pocket"] #pocket { display: block !important; page-break-inside: avoid; }
+  body[data-print="safety"] #safety-print { display: block !important; page: safety-sheet; }
   @page { size: A5 landscape; margin: 8mm; }
+  @page safety-sheet { size: A4 portrait; margin: 14mm; }
 }
 
 /* ---------- 响应式 ---------- */
@@ -1719,3 +1723,195 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
 }
 .alert[hidden] { display: none; }
 .alert b { color: var(--danger); font-size: 13.5px; }
+
+/* ============================================================
+   0.4.0：安全计划 / 应用锁 / 快速离开 / 加密备份
+   ============================================================ */
+
+[hidden] { display: none !important; }
+
+/* ---------- 顶栏：快速离开 ---------- */
+.quick-exit {
+  color: var(--muted);
+  border-color: transparent;
+  letter-spacing: .04em;
+}
+.quick-exit:hover { color: var(--ink); border-color: var(--line); }
+.qe-short { display: none; }
+@media (max-width: 430px) {
+  .qe-long { display: none; }
+  .qe-short { display: inline; }
+}
+
+/* ---------- 现在页：安全计划入口 ---------- */
+.safety-entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "k arrow" "t arrow" "d arrow";
+  gap: 2px 14px;
+  align-items: center;
+  margin: 20px 0 0;
+  padding: 18px 20px;
+  border: 1px solid var(--sage-line);
+  border-radius: var(--r);
+  background: var(--sage-soft);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color .18s var(--ease), transform .18s var(--ease);
+}
+.safety-entry:hover { border-color: var(--sage); transform: translateY(-1px); }
+.safety-entry__k {
+  grid-area: k;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: var(--sage);
+  text-transform: uppercase;
+}
+.safety-entry__t { grid-area: t; font-family: var(--font-serif); font-size: 18px; line-height: 1.45; }
+.safety-entry__d { grid-area: d; font-size: 12.5px; color: var(--muted); }
+.safety-entry__arrow { grid-area: arrow; color: var(--sage); font-size: 18px; }
+@media (max-width: 700px) {
+  .safety-entry__t { font-size: 16.5px; }
+}
+
+/* ---------- 安全计划正文 ---------- */
+.sp-step { border-top: 1px solid var(--line-soft); padding: 22px 0 4px; }
+#safety-steps .sp-step:first-child { border-top: 0; padding-top: 2px; }
+.sp-step__head { display: flex; align-items: baseline; gap: 12px; }
+.sp-k {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: var(--sage);
+  flex: none;
+}
+.sp-step__head .h3 { margin: 0; }
+.sp-hint { margin: 6px 0 12px; }
+.sp-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sp-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.sp-item__t { word-break: break-word; }
+.sp-item__t a { color: var(--sage); text-decoration: none; border-bottom: 1px solid var(--sage-line); }
+.sp-empty { padding: 6px 2px; font-size: 13px; color: var(--muted); }
+.sp-add { display: flex; gap: 8px; align-items: stretch; }
+.sp-add .btn { flex: 0 0 auto; white-space: nowrap; padding: 0 18px; }
+.sp-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14.5px;
+}
+.sp-add input::placeholder { color: var(--muted); }
+.sp-add input:focus { outline: 2px solid var(--sage); outline-offset: 1px; }
+.sp-presets { margin-top: 10px; }
+.sp-presets .chip { font-size: 12.5px; }
+
+/* ---------- 提示条：温和版 ---------- */
+.alert--warm { border-color: var(--sage-line); background: var(--sage-soft); }
+.alert--warm b { color: var(--sage); }
+.alert--warm a { color: var(--ink); border-bottom: 1px solid var(--sage-line); text-decoration: none; }
+
+/* ---------- 隐私与安全 ---------- */
+.priv-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.card-head + .priv-row { border-top: 0; padding-top: 4px; }
+.priv-row__t { flex: 1 1 240px; display: grid; gap: 3px; }
+.priv-row__t b { font-size: 14.5px; font-weight: 600; }
+.priv-row__t span { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+.priv-row__a { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.priv-row select,
+.priv-row input[type="url"] {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;   /* iOS 聚焦时 <16px 会放大页面 */
+}
+.priv-row input[type="url"] { width: 100%; min-width: 180px; padding: 0 12px; }
+.priv-row select:focus,
+.priv-row input[type="url"]:focus { outline: 2px solid var(--sage); outline-offset: 1px; }
+
+/* ---------- 应用锁浮层 ---------- */
+.overlay--lock { background: var(--bg); }
+.panel--lock { max-width: 430px; }
+#pass-overlay .lede { margin: 0 0 18px; }
+.panel--lock .panel__body { padding: 30px 26px calc(28px + var(--safe-bottom)); }
+.brand-mark--lg { width: 46px; height: 46px; margin-bottom: 14px; }
+.panel--lock .h2 { font-size: 26px; margin: 2px 0 8px; }
+.panel--lock .lede { margin: 0 0 18px; }
+.panel--lock .field { margin-bottom: 12px; }
+.lock-foot { margin: 14px 0 6px; }
+@media (max-width: 700px) {
+  /* 锁屏在手机上也是一张居中的卡片，不做底部抽屉 */
+  .overlay--lock { align-items: center; padding: 20px; }
+  .panel--lock { border-radius: var(--r-lg); border-bottom: 1px solid var(--line); max-height: 88vh; }
+}
+.pass-err {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--clay-soft);
+  color: var(--clay);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ---------- 打印：安全计划 ---------- */
+.print-sheet { font-family: var(--font-sans); color: #222; }
+.print-sheet .pp__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1.5px solid #222;
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+}
+.print-sheet .pp__head b { font-family: var(--font-serif); font-size: 20px; letter-spacing: .1em; }
+.print-sheet .pp__head span { font-size: 11px; color: #555; }
+.print-sheet .pp__block { margin-bottom: 12px; page-break-inside: avoid; }
+.print-sheet .pp__block h3 { font-size: 13px; margin: 0 0 4px; }
+.print-sheet .pp__k { font-family: var(--font-mono); font-size: 10px; color: #666; margin-right: 6px; }
+.print-sheet ul { margin: 0; padding-left: 18px; }
+.print-sheet li { font-size: 13px; line-height: 1.75; }
+.print-sheet .pp__foot {
+  margin-top: 16px;
+  border-top: 1px dashed #999;
+  padding-top: 8px;
+  font-size: 11px;
+  color: #444;
+}
+

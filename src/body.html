@@ -11,6 +11,7 @@
     <a class="nav-item" href="#/certainty" data-route="certainty"><span class="nav-k">03</span><span>确定性<span class="nav-d">事实 / 解释 / 不可知</span></span></a>
     <a class="nav-item" href="#/today" data-route="today"><span class="nav-k">04</span><span>今日<span class="nav-d">做到一件就成立</span></span></a>
     <a class="nav-item" href="#/review" data-route="review"><span class="nav-k">05</span><span>回顾<span class="nav-d">只看趋势，不看单日</span></span></a>
+    <a class="nav-item" href="#/safety" data-route="safety"><span class="nav-k">06</span><span>安全计划<span class="nav-d">提前写一次，难受时照做</span></span></a>
   </nav>
   <div class="rail__foot">
     <button class="btn btn--primary btn--sm" data-action="open-sos">我现在很难受</button>
@@ -24,6 +25,9 @@
     <div class="mobile-brand"><span class="brand-mark" aria-hidden="true"></span><b>着陆台</b></div>
     <div class="topbar__brand"><b>着陆台</b><span id="topbar-date"></span></div>
     <div class="topbar__spacer"></div>
+    <button class="btn btn--quiet btn--sm quick-exit" data-action="quick-exit" aria-label="快速离开：立刻换成一个普通网站">
+      <span class="qe-long">快速离开</span><span class="qe-short">离开</span>
+    </button>
     <button class="btn btn--ghost btn--sm" data-action="open-sos">我现在很难受</button>
   </header>
 
@@ -61,6 +65,13 @@
           <span class="quick__d">分成：事实、解释、不可知、下一步</span>
         </button>
       </div>
+
+      <a class="safety-entry" href="#/safety">
+        <span class="safety-entry__k">安全计划</span>
+        <span class="safety-entry__t">如果哪天真撑不住，我已经写好了怎么办</span>
+        <span class="safety-entry__d">7 步 · 在还稳的时候写一次 · <span id="safety-entry-badge">未写</span></span>
+        <span class="safety-entry__arrow" aria-hidden="true">→</span>
+      </a>
 
       <div class="card card--quiet">
         <div class="card-head"><h2 class="h3">确定性的三个来源</h2><span class="badge">先看这个</span></div>
@@ -329,6 +340,31 @@
       </div>
     </section>
 
+    <!-- ============ 安全计划 ============ -->
+    <section class="view" data-view="safety">
+      <header class="view-head">
+        <p class="eyebrow">安全计划</p>
+        <h1 class="h1">在还稳的时候，<br>写一次。</h1>
+        <p class="lede">这份东西不是给现在的你看的，是给“那时候的你”看的。真到撑不住，脑子大概率是空的，照着做就行。</p>
+      </header>
+
+      <div class="alert alert--warm" role="note">
+        <b>如果现在就有危险</b>
+        <span>打 <a href="tel:12356">12356</a>（全国心理援助热线），或 <a href="tel:120">120</a> / <a href="tel:110">110</a>。别等自己想清楚再打。</span>
+      </div>
+
+      <div id="safety-steps"></div>
+
+      <p class="small muted mt-16" id="sp-status"></p>
+
+      <div class="actions-row">
+        <button class="btn btn--ghost btn--sm" data-action="print-safety">打印这份计划</button>
+        <button class="btn btn--ghost btn--sm" data-action="export-json">导出备份</button>
+      </div>
+      <p class="small muted">打印出来折起来放钱包、贴门后。手机没电、断网、人慌的时候，纸最可靠。</p>
+      <p class="small muted mt-12">写不全没有关系：先写“可以打电话的人”和“让身边的东西不那么危险”这两节，它们最救命。</p>
+    </section>
+
     <!-- ============ 更多 ============ -->
     <section class="view" data-view="more">
       <header class="view-head">
@@ -463,6 +499,32 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-head"><h2 class="h3">隐私与安全</h2><span class="badge" id="lock-badge">未设口令</span></div>
+        <div class="priv-row">
+          <div class="priv-row__t"><b>应用锁</b><span id="lock-note">默认关闭。打开后每次进入要输口令，本机记录同时改成加密存放。</span></div>
+          <div class="priv-row__a" id="priv-lock-actions"></div>
+        </div>
+        <div class="priv-row">
+          <div class="priv-row__t"><b>快速离开</b><span>点顶栏「快速离开」时，把当前页面换成一个普通网站。</span></div>
+          <div class="priv-row__a">
+            <select id="setting-quick-exit" aria-label="快速离开的目标网站">
+              <option value="search">搜索首页</option>
+              <option value="weather">天气网页</option>
+              <option value="blank">空白页</option>
+              <option value="custom">自己填网址</option>
+            </select>
+            <input type="url" id="setting-quick-url" placeholder="https://…" hidden aria-label="快速离开的网址">
+          </div>
+        </div>
+        <div class="priv-row">
+          <div class="priv-row__t"><b>加密备份</b><span>导出时给文件设一个口令。放到网盘、U 盘里，别人打不开。</span></div>
+          <div class="priv-row__a"><button class="btn btn--ghost btn--sm" data-action="export-enc">导出加密备份</button></div>
+        </div>
+        <p class="small muted mt-12">应用锁挡住的是“别人拿起你手机随手翻两下”。它挡不住拿到设备后离线跑字典的人，也不替代系统锁屏。真的需要更强的保护，请用系统级的加密和锁屏。</p>
+        <p class="small muted mt-8" id="crypto-note" hidden>这个浏览器不支持网页加密（通常是因为用 file:// 直接打开），应用锁和加密备份会不可用。用本地服务器或网页版打开就没问题。</p>
+      </div>
+
       <div class="card" id="install-card">
         <div class="card-head"><h2 class="h3">安装到设备</h2><span class="badge" id="install-badge">PWA</span></div>
         <p class="small muted">装好后从桌面图标打开：全屏、离线可用；数据仍然只存在本机。</p>
@@ -482,7 +544,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.3.1 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.4.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -702,6 +764,70 @@
   </div>
 </div>
 
+<!-- ============ 应用锁浮层 ============ -->
+<div class="overlay overlay--lock" id="lock-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="lock-title">
+  <div class="panel panel--lock">
+    <div class="panel__body">
+      <span class="brand-mark brand-mark--lg" aria-hidden="true"></span>
+      <p class="panel__kicker">LANDING PAD</p>
+      <h2 class="h2" id="lock-title">已锁上</h2>
+      <p class="lede">输入口令继续。这台设备上的记录是加密存放的。</p>
+      <form id="lock-form" autocomplete="off">
+        <div class="field">
+          <label for="lock-pass">口令</label>
+          <input type="password" id="lock-pass" autocomplete="current-password" inputmode="text" spellcheck="false">
+        </div>
+        <p class="small muted" id="lock-hint" hidden></p>
+        <p class="pass-err" id="lock-err" hidden role="alert"></p>
+        <button class="btn btn--primary btn--block" id="lock-btn" type="submit" data-action="unlock">解锁</button>
+      </form>
+      <p class="lock-foot"><button class="link-btn" data-action="lock-forgot" type="button">忘记口令？</button></p>
+      <p class="small muted">口令不保存在任何地方，忘了就只能清空本机数据、再用备份恢复。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 口令浮层 ============ -->
+<div class="overlay" id="pass-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pass-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="pass-kicker">口令</span>
+        <h2 class="h2" id="pass-title">设置口令</h2>
+      </div>
+      <button class="panel__close" data-action="pass-cancel" aria-label="关闭">×</button>
+    </div>
+    <div class="panel__body">
+      <p class="lede" id="pass-lede"></p>
+      <form id="pass-form" autocomplete="off">
+        <div class="field" id="pass-cur-field" hidden>
+          <label for="pass-cur">当前口令</label>
+          <input type="password" id="pass-cur" autocomplete="current-password" spellcheck="false">
+        </div>
+        <div class="field" id="pass-new-field" hidden>
+          <label for="pass-new" id="pass-new-label">新口令</label>
+          <input type="password" id="pass-new" autocomplete="new-password" spellcheck="false">
+          <span class="hint" id="pass-strength"></span>
+        </div>
+        <div class="field" id="pass-new2-field" hidden>
+          <label for="pass-new2">再输一次</label>
+          <input type="password" id="pass-new2" autocomplete="new-password" spellcheck="false">
+        </div>
+        <div class="field" id="pass-one-field" hidden>
+          <label for="pass-one" id="pass-one-label">口令</label>
+          <input type="password" id="pass-one" autocomplete="current-password" spellcheck="false">
+        </div>
+        <p class="pass-err" id="pass-err" hidden role="alert"></p>
+        <div class="actions-row mb-0">
+          <button class="btn btn--primary" type="submit" id="pass-submit" data-action="pass-submit">确定</button>
+          <button class="btn btn--ghost" type="button" data-action="pass-cancel">取消</button>
+        </div>
+      </form>
+      <p class="small muted mt-12" id="pass-foot"></p>
+    </div>
+  </div>
+</div>
+
 <!-- ============ 导入预览浮层 ============ -->
 <div class="overlay" id="import-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="import-title">
   <div class="panel">
@@ -732,6 +858,9 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-msg"></span><button class="toast__action" id="toast-action" hidden></button></div>
+
+<!-- ============ 打印安全计划 ============ -->
+<div class="print-only print-sheet" id="safety-print"></div>
 
 <!-- ============ 打印口袋卡 ============ -->
 <div class="pocket print-only" id="pocket">

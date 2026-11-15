@@ -6,9 +6,16 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.3.1';
+  var APP_VERSION = '0.4.0';
   var SCHEMA_VERSION = 1;
-  var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'more'];
+  var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
+  var KDF_ITER = 210000;
+  var MIN_PASS = 6;
+  var QUICK_EXIT = {
+    search: 'https://www.baidu.com/',
+    weather: 'https://www.weather.com.cn/',
+    blank: 'about:blank'
+  };
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
   var KIND_LABEL = { why: '为什么', if: '如果', self: '自我否定', others: '猜别人的想法或结果', her: '猜别人的想法或结果', other: '说不清' };
   var REC_LABEL = { sos: '着陆', rum: '反刍', cert: '确定性', tr: '思维记录', sleep: '睡前' };
@@ -56,7 +63,11 @@
       parked: [],
       daily: {},
       window: { time: '19:30', minutes: 15, openedAt: 0, closedDay: '' },
-      settings: { theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0, nudgeSnoozeUntil: 0 }
+      safety: { signals: [], coping: [], distract: [], people: [], pros: [], env: [], reasons: [], updatedAt: 0 },
+      settings: {
+        theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0, nudgeSnoozeUntil: 0,
+        quickExit: 'search', quickExitUrl: ''
+      }
     };
   }
 
@@ -81,21 +92,77 @@
       if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
       b.settings.lastExportAt = Number(raw.settings.lastExportAt) || 0;
       b.settings.nudgeSnoozeUntil = Number(raw.settings.nudgeSnoozeUntil) || 0;
+      var qe = raw.settings.quickExit;
+      b.settings.quickExit = ['search', 'weather', 'blank', 'custom'].indexOf(qe) >= 0 ? qe : 'search';
+      b.settings.quickExitUrl = String(raw.settings.quickExitUrl || '').slice(0, 400);
+    }
+    if (raw.safety && typeof raw.safety === 'object') {
+      ['signals', 'coping', 'distract', 'people', 'pros', 'env', 'reasons'].forEach(function (k) {
+        if (!Array.isArray(raw.safety[k])) return;
+        b.safety[k] = raw.safety[k]
+          .filter(function (x) { return typeof x === 'string'; })
+          .map(function (x) { return x.slice(0, 200); })
+          .filter(Boolean);
+      });
+      b.safety.updatedAt = Number(raw.safety.updatedAt) || 0;
     }
     if (raw.firstSeen) b.firstSeen = Number(raw.firstSeen) || Date.now();
     return b;
   }
 
-  function load() {
+  /* ---------------- 加解密（WebCrypto） ---------------- */
+
+  var cryptoOK = (function () {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return blank();
-      return normalize(JSON.parse(raw));
-    } catch (e) {
-      storageOK = false;
-      return blank();
-    }
+      return !!(window.crypto && window.crypto.subtle && window.crypto.subtle.importKey &&
+        window.crypto.getRandomValues && window.TextEncoder && window.TextDecoder);
+    } catch (e) { return false; }
+  })();
+
+  function b64FromBytes(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
   }
+
+  function bytesFromB64(str) {
+    var s = atob(String(str || ''));
+    var out = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+
+  function randBytes(n) {
+    var b = new Uint8Array(n);
+    window.crypto.getRandomValues(b);
+    return b;
+  }
+
+  // 口令先加应用前缀再进 KDF：同一个口令在别的工具里不会派生出同一把钥匙
+  function deriveKey(pass, saltB64, iter) {
+    return window.crypto.subtle
+      .importKey('raw', new TextEncoder().encode('zhuolu|' + pass), { name: 'PBKDF2' }, false, ['deriveKey'])
+      .then(function (base) {
+        return window.crypto.subtle.deriveKey({
+          name: 'PBKDF2', salt: bytesFromB64(saltB64), iterations: iter || KDF_ITER, hash: 'SHA-256'
+        }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      });
+  }
+
+  function encryptText(key, text) {
+    var iv = randBytes(12);
+    return window.crypto.subtle
+      .encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text))
+      .then(function (buf) { return { iv: b64FromBytes(iv), ct: b64FromBytes(new Uint8Array(buf)) }; });
+  }
+
+  function decryptText(key, ivB64, ctB64) {
+    return window.crypto.subtle
+      .decrypt({ name: 'AES-GCM', iv: bytesFromB64(ivB64) }, key, bytesFromB64(ctB64))
+      .then(function (buf) { return new TextDecoder().decode(new Uint8Array(buf)); });
+  }
+
+  /* ---------------- 本地存储：明文 / 加密信封 ---------------- */
 
   var lastStorageToast = 0;
 
@@ -109,21 +176,111 @@
     }
   }
 
-  function save() {
-    if (!storageOK) { storageFailed(); return; }
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      storageFailed();
-    }
-  }
-
   function renderStorageAlert() {
     var el = $('#storage-alert');
     if (el) el.hidden = storageOK;
   }
 
-  var state = load();
+  // lock.on：本地数据是加密信封；lock.unlocked：当前会话已解锁（钥匙只在内存里）
+  var lock = { on: false, unlocked: false, key: null, meta: null, tries: 0, blockedUntil: 0 };
+  var uiHint = { theme: 'auto', motion: 'auto' };
+  var state = null;
+  var saveChain = Promise.resolve();
+  var saveSeq = 0;
+
+  function themeOf() {
+    if (state && state.settings) return state.settings.theme || 'auto';
+    return uiHint.theme || 'auto';
+  }
+
+  function motionOf() {
+    if (state && state.settings) return state.settings.motion || 'auto';
+    return uiHint.motion || 'auto';
+  }
+
+  function readRawStore() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      return obj && typeof obj === 'object' ? obj : null;
+    } catch (e) {
+      storageOK = false;
+      return null;
+    }
+  }
+
+  function bootStore() {
+    var rs = readRawStore();
+    if (rs && rs.locked === true && rs.lock && rs.lock.ct && rs.lock.iv && rs.lock.salt) {
+      lock.on = true;
+      lock.unlocked = false;
+      lock.meta = rs.lock;
+      if (rs.ui) {
+        uiHint.theme = rs.ui.theme === 'dark' || rs.ui.theme === 'light' ? rs.ui.theme : 'auto';
+        uiHint.motion = rs.ui.motion === 'reduce' ? 'reduce' : 'auto';
+      }
+      return;
+    }
+    lock.unlocked = true;
+    state = normalize(rs);
+    uiHint.theme = state.settings.theme || 'auto';
+    uiHint.motion = state.settings.motion || 'auto';
+  }
+
+  // 把加密信封写回去。salt 不变时只换 iv / ct（每次加密必须用新 iv）
+  function persistEnvelope(iv, ct, salt) {
+    var m = lock.meta || {};
+    var next = {
+      v: 1,
+      alg: 'AES-GCM-256',
+      kdf: 'PBKDF2-SHA256',
+      iter: m.iter || KDF_ITER,
+      salt: salt || m.salt || '',
+      iv: iv,
+      ct: ct,
+      autoMin: typeof m.autoMin === 'number' ? m.autoMin : 5,
+      hint: m.hint || '',
+      createdAt: m.createdAt || Date.now()
+    };
+    var env = { v: 1, locked: true, ui: { theme: themeOf(), motion: motionOf() }, lock: next };
+    lock.meta = next;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(env));
+    } catch (e) {
+      storageFailed();
+    }
+  }
+
+  function save() {
+    if (!storageOK) { storageFailed(); return; }
+    if (!state) return;                              // 还没解锁：一个字节都不写
+    var text;
+    try { text = JSON.stringify(state); } catch (e) { storageFailed(); return; }
+    uiHint.theme = state.settings.theme || 'auto';
+    uiHint.motion = state.settings.motion || 'auto';
+    if (!lock.on) {
+      try { localStorage.setItem(KEY, text); } catch (e) { storageFailed(); }
+      return;
+    }
+    if (!cryptoOK) { storageFailed(); return; }
+    var seq = ++saveSeq;
+    saveChain = saveChain.then(function () {
+      var key = lock.key;
+      if (!key) return null;
+      return encryptText(key, text).then(function (out) {
+        if (seq !== saveSeq) return null;            // 后面还有更新的状态，这次丢弃
+        persistEnvelope(out.iv, out.ct, null);
+        return null;
+      });
+    }).catch(function () { storageFailed(); });
+  }
+
+  function savePending() {
+    return saveChain.then(function () { return null; }, function () { return null; });
+  }
+
+  bootStore();
 
   /* ---------------- 主题 / 动效 ---------------- */
 
@@ -131,12 +288,12 @@
   var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
   function applyTheme() {
-    var t = state.settings.theme || 'auto';
+    var t = themeOf();
     var dark = t === 'dark' || (t === 'auto' && mqDark && mqDark.matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', dark ? '#141410' : '#f2eee3');
-    var m = state.settings.motion || 'auto';
+    var m = motionOf();
     var reduce = m === 'reduce' || (m === 'auto' && mqReduce && mqReduce.matches);
     document.documentElement.setAttribute('data-motion', reduce ? 'reduce' : 'full');
   }
@@ -169,6 +326,452 @@
     el.classList.add('is-on');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(hideToast, ms || (actionFn ? 6000 : 2600));
+  }
+
+  /* ---------------- 口令对话框 ---------------- */
+
+  var passCfg = null;
+
+  function passVal(id) { var el = $('#' + id); return el ? String(el.value || '') : ''; }
+
+  function passError(msg) {
+    var el = $('#pass-err');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  function passBusy(on) {
+    var btn = $('#pass-submit');
+    if (!btn) return;
+    btn.disabled = !!on;
+    btn.textContent = on ? '处理中…' : ((passCfg && passCfg.ok) || '确定');
+  }
+
+  function openPass(cfg) {
+    passCfg = cfg;
+    var kick = $('#pass-kicker');
+    if (kick) kick.textContent = cfg.kicker || '口令';
+    var title = $('#pass-title');
+    if (title) title.textContent = cfg.title || '';
+    var lede = $('#pass-lede');
+    if (lede) { lede.textContent = cfg.lede || ''; lede.hidden = !cfg.lede; }
+    [['#pass-cur-field', cfg.cur], ['#pass-new-field', cfg.new], ['#pass-new2-field', cfg.new2], ['#pass-one-field', cfg.one]]
+      .forEach(function (pair) {
+        var el = $(pair[0]);
+        if (el) el.hidden = !pair[1];
+      });
+    var nl = $('#pass-new-label');
+    if (nl) nl.textContent = cfg.newLabel || '新口令';
+    var ol = $('#pass-one-label');
+    if (ol) ol.textContent = cfg.oneLabel || '口令';
+    ['pass-cur', 'pass-new', 'pass-new2', 'pass-one'].forEach(function (id) {
+      var el = $('#' + id);
+      if (el) el.value = '';
+    });
+    passError('');
+    passBusy(false);
+    var foot = $('#pass-foot');
+    if (foot) { foot.textContent = cfg.foot || ''; foot.hidden = !cfg.foot; }
+    var str = $('#pass-strength');
+    if (str) {
+      str.textContent = '至少 ' + MIN_PASS + ' 位。长一点更安全；首尾空格会被忽略。';
+      str.hidden = !cfg.new;
+    }
+    openOverlay('#pass-overlay', cfg.one ? '#pass-one' : (cfg.cur ? '#pass-cur' : '#pass-new'));
+  }
+
+  function closePass() {
+    var btn = $('#pass-submit');
+    if (btn && btn.disabled) return;          // 正在算密钥，别让它半路关掉
+    passBusy(false);
+    passCfg = null;
+    closeOverlay('#pass-overlay');
+  }
+
+  function submitPass() {
+    var cfg = passCfg;
+    if (!cfg) return;
+    var v = {
+      cur: passVal('pass-cur'),
+      np: passVal('pass-new').trim(),
+      np2: passVal('pass-new2').trim(),
+      one: passVal('pass-one')
+    };
+    if (cfg.cur && !v.cur) { passError('先输入当前口令。'); return; }
+    if (cfg.one && !v.one) { passError('先输入口令。'); return; }
+    if (cfg.new) {
+      if (v.np.length < MIN_PASS) { passError('口令至少 ' + MIN_PASS + ' 位。'); return; }
+      if (v.np !== v.np2) { passError('两次输入不一样。'); return; }
+    }
+    passError('');
+    passBusy(true);
+    var out;
+    try { out = cfg.run(v); } catch (e) { out = '出错了，再试一次。'; }
+    Promise.resolve(out).then(function (err) {
+      passBusy(false);
+      if (err) { passError(err); return; }
+      var after = cfg.after;
+      closePass();
+      if (after) after();
+    }, function () {
+      passBusy(false);
+      passError('出错了，再试一次。');
+    });
+  }
+
+  /* ---------------- 应用锁 ---------------- */
+
+  function verifyPass(pass) {
+    var m = lock.meta;
+    if (!m || !m.ct || !cryptoOK) return Promise.resolve(null);
+    return deriveKey(pass, m.salt, m.iter || KDF_ITER).then(function (key) {
+      return decryptText(key, m.iv, m.ct).then(function () { return key; });
+    }).catch(function () { return null; });
+  }
+
+  function unlockApp(pass) {
+    var m = lock.meta;
+    if (!m || !m.ct || !cryptoOK) return Promise.resolve(false);
+    return deriveKey(pass, m.salt, m.iter || KDF_ITER).then(function (key) {
+      return decryptText(key, m.iv, m.ct).then(function (text) {
+        state = normalize(JSON.parse(text));
+        lock.key = key;
+        lock.unlocked = true;
+        lock.tries = 0;
+        lock.blockedUntil = 0;
+        uiHint.theme = state.settings.theme || 'auto';
+        uiHint.motion = state.settings.motion || 'auto';
+        return true;
+      });
+    }).catch(function () { return false; });
+  }
+
+  function enableLock(pass) {
+    var salt = b64FromBytes(randBytes(16));
+    return deriveKey(pass, salt, KDF_ITER).then(function (key) {
+      return encryptText(key, JSON.stringify(state)).then(function (out) {
+        lock.on = true;
+        lock.unlocked = true;
+        lock.key = key;
+        lock.meta = null;
+        persistEnvelope(out.iv, out.ct, salt);
+        return null;
+      });
+    }).catch(function () { return '这台设备上的浏览器没能完成加密。'; });
+  }
+
+  function changeLock(pass) {
+    var salt = b64FromBytes(randBytes(16));
+    return deriveKey(pass, salt, KDF_ITER).then(function (key) {
+      return encryptText(key, JSON.stringify(state)).then(function (out) {
+        lock.key = key;
+        persistEnvelope(out.iv, out.ct, salt);
+        return null;
+      });
+    }).catch(function () { return '改口令没成功，原来的口令还能用。'; });
+  }
+
+  function disableLock() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {
+      return '写不进去，先导出一份备份。';
+    }
+    lock.on = false;
+    lock.key = null;
+    lock.unlocked = true;
+    lock.meta = null;
+    saveChain = Promise.resolve();
+    return null;
+  }
+
+  function lockError(msg) {
+    var el = $('#lock-err');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  function showLock() {
+    var hint = $('#lock-hint');
+    if (hint) {
+      var h = lock.meta && lock.meta.hint;
+      hint.textContent = h ? '提示：' + h : '';
+      hint.hidden = !h;
+    }
+    lockError('');
+    var el = $('#lock-pass');
+    if (el) el.value = '';
+    openOverlay('#lock-overlay', '#lock-pass');
+  }
+
+  function hideLock() {
+    var o = $('#lock-overlay');
+    if (!o) return;
+    o.hidden = true;
+    lastFocus = null;
+    if (!anyOverlayOpen()) {
+      document.body.classList.remove('is-locked');
+      setBackgroundInert(false);
+    }
+  }
+
+  function tryUnlock() {
+    var el = $('#lock-pass');
+    var pass = el ? el.value : '';
+    if (!pass) { lockError('先输入口令。'); return; }
+    if (lock.blockedUntil && Date.now() < lock.blockedUntil) {
+      lockError('试错太多次，等 ' + Math.ceil((lock.blockedUntil - Date.now()) / 1000) + ' 秒。');
+      return;
+    }
+    var btn = $('#lock-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '解锁中…'; }
+    unlockApp(pass).then(function (ok) {
+      if (btn) { btn.disabled = false; btn.textContent = '解锁'; }
+      if (!ok) {
+        lock.tries++;
+        if (lock.tries >= 5) {
+          lock.blockedUntil = Date.now() + 30000;
+          lock.tries = 0;
+        }
+        lockError('口令不对。');
+        return;
+      }
+      hideLock();
+      bootApp();
+      showToast('已解锁。');
+    }, function () {
+      if (btn) { btn.disabled = false; btn.textContent = '解锁'; }
+      lockError('解锁失败，再试一次。');
+    });
+  }
+
+  function lockForgot() {
+    if (!confirm('忘记口令，就打不开本机的这些记录——这台设备上只有加密后的密文，没有任何地方存着原口令。\n\n如果你在别处存过备份，可以清空本机数据，重新打开后把备份导进来。')) return;
+    if (!confirm('最后确认：删除这台设备上的全部数据？这个动作不能撤销。')) return;
+    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+    location.reload();
+  }
+
+  function lockNow() {
+    if (!lock.on || !lock.unlocked) return;
+    lock.unlocked = false;
+    lock.key = null;
+    state = null;
+    savePending().then(function () {
+      try { location.reload(); } catch (e) { /* ignore */ }
+    });
+  }
+
+  function autoLockMin() {
+    var m = lock.meta && typeof lock.meta.autoMin === 'number' ? lock.meta.autoMin : 5;
+    return Math.max(0, Math.min(120, m));
+  }
+
+  function setAutoLock(min) {
+    min = Math.max(0, Math.min(120, Number(min) || 0));
+    if (!lock.on || !lock.meta) return;
+    lock.meta.autoMin = min;
+    persistEnvelope(lock.meta.iv, lock.meta.ct, lock.meta.salt);
+    lastActive = Date.now();
+  }
+
+  var lastActive = Date.now();
+  var hiddenAt = 0;
+  var idleTimer = null;
+
+  function startIdleWatch() {
+    if (idleTimer) return;
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+      document.addEventListener(ev, function () { lastActive = Date.now(); }, { passive: true, capture: true });
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      var away = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      lastActive = Date.now();
+      if (!lock.on || !lock.unlocked) return;
+      var min = autoLockMin();
+      if (min > 0 && away >= min * 60000) lockNow();
+    });
+    idleTimer = setInterval(function () {
+      if (!lock.on || !lock.unlocked) return;
+      var min = autoLockMin();
+      if (min <= 0 || document.visibilityState !== 'visible') return;
+      if (Date.now() - lastActive >= min * 60000) lockNow();
+    }, 15000);
+  }
+
+  /* ---------------- 快速离开 ---------------- */
+
+  function quickExitUrl() {
+    var mode = (state && state.settings && state.settings.quickExit) || 'search';
+    if (mode === 'custom') {
+      var u = String((state && state.settings && state.settings.quickExitUrl) || '').trim();
+      if (/^https?:\/\/[^\s]+$/i.test(u)) return u;
+      return QUICK_EXIT.search;
+    }
+    return QUICK_EXIT[mode] || QUICK_EXIT.search;
+  }
+
+  function quickExit() {
+    var url = quickExitUrl();
+    try { location.replace(url); } catch (e) { /* ignore */ }
+    // 目标被拦下来时退回一个普通网站，不让按钮失效
+    setTimeout(function () {
+      try { location.replace(QUICK_EXIT.search); } catch (e) { /* ignore */ }
+    }, 250);
+  }
+
+  /* ---------------- 安全计划 ---------------- */
+
+  var SP_SECTIONS = [
+    { key: 'signals', n: '01', title: '我快撑不住的时候，是这样', hint: '越具体越有用：几点、在做什么、脑子里冒的是哪句话。' },
+    { key: 'coping', n: '02', title: '我自己一个人就能做的', hint: '不花钱、不用别人帮忙、十分钟内能开始的。' },
+    { key: 'distract', n: '03', title: '能把我从脑子里拽出来的人或地方', hint: '写具体的人名和地点。不用谈心事，待着就行。' },
+    { key: 'people', n: '04', title: '可以打电话的人', hint: '写名字和号码。到时候不用组织语言。' },
+    { key: 'pros', n: '05', title: '专业人士和热线', hint: '写下来。手机没电、记不住号码的时候照着拨。' },
+    { key: 'env', n: '06', title: '让身边的东西不那么危险', hint: '把药、刀、酒交给别人保管——这是最有效的一步。' },
+    { key: 'reasons', n: '07', title: '让我还愿意待着的理由', hint: '可以很小：一只猫、没看完的剧、答应过谁的事。' }
+  ];
+
+  var SP_PRESETS = {
+    signals: ['凌晨还醒着', '反复翻聊天记录', '不想回任何人消息', '觉得自己没价值', '开始想“消失”这个词'],
+    coping: ['冲个热水澡', '出门走十五分钟', '延长呼气做十轮', '把想法写下来，不定论', '把手机放到另一个房间'],
+    distract: ['去楼下便利店', '去图书馆二楼', '看一部看过的剧', '给朋友发一句“在忙吗”'],
+    people: ['妈妈', '最好的朋友', '舍友'],
+    pros: ['12356 全国心理援助热线', '010-82951332 北京 24 小时', '学校心理中心'],
+    env: ['把药交给家人保管', '把刀收进柜子', '不在深夜一个人出门'],
+    reasons: ['我妈会受不了', '还有没看完的书', '想看看三年后的自己']
+  };
+
+  function spData() {
+    if (!state.safety) state.safety = { signals: [], coping: [], distract: [], people: [], pros: [], env: [], reasons: [], updatedAt: 0 };
+    SP_SECTIONS.forEach(function (s) {
+      if (!Array.isArray(state.safety[s.key])) state.safety[s.key] = [];
+    });
+    return state.safety;
+  }
+
+  function spCount() {
+    if (!state || !state.safety) return 0;
+    return SP_SECTIONS.reduce(function (n, s) {
+      var list = state.safety[s.key];
+      return n + (Array.isArray(list) ? list.length : 0);
+    }, 0);
+  }
+
+  function spTextHtml(t) {
+    var raw = String(t);
+    var out = esc(raw);
+    var m = raw.match(/1[3-9]\d{9}|0\d{2,3}-?\d{7,8}/);
+    if (!m) return out;
+    return out.replace(esc(m[0]), function () {
+      return '<a href="tel:' + esc(m[0].replace(/-/g, '')) + '">' + esc(m[0]) + '</a>';
+    });
+  }
+
+  function buildSafetyScaffold() {
+    var host = $('#safety-steps');
+    if (!host || host.getAttribute('data-built') === '1') return;
+    host.innerHTML = SP_SECTIONS.map(function (s) {
+      return '<div class="sp-step">' +
+        '<div class="sp-step__head"><span class="sp-k">' + s.n + '</span><h2 class="h3">' + esc(s.title) + '</h2></div>' +
+        '<p class="small muted sp-hint">' + esc(s.hint) + '</p>' +
+        '<ul class="sp-list" data-sp-list="' + s.key + '"></ul>' +
+        '<div class="sp-add">' +
+          '<input type="text" id="sp-input-' + s.key + '" data-sp-input="' + s.key + '" maxlength="200" ' +
+            'placeholder="自己加一条，按回车" aria-label="' + esc(s.title) + '：加一条">' +
+          '<button class="btn btn--ghost btn--sm" data-action="sp-add" data-key="' + s.key + '">加入</button>' +
+        '</div>' +
+        '<div class="chips sp-presets" data-sp-presets="' + s.key + '" aria-label="点一下加进来"></div>' +
+      '</div>';
+    }).join('');
+    host.setAttribute('data-built', '1');
+  }
+
+  function renderSafety() {
+    if (!state) return;
+    buildSafetyScaffold();
+    var d = spData();
+    SP_SECTIONS.forEach(function (s) {
+      var list = $('[data-sp-list="' + s.key + '"]');
+      if (list) {
+        list.innerHTML = d[s.key].length
+          ? d[s.key].map(function (t, i) {
+            return '<li class="sp-item"><span class="sp-item__t">' + spTextHtml(t) + '</span>' +
+              '<button class="icon-btn" data-action="sp-del" data-key="' + s.key + '" data-i="' + i + '" aria-label="删掉这一条">×</button></li>';
+          }).join('')
+          : '<li class="sp-empty">还没写。</li>';
+      }
+      var pres = $('[data-sp-presets="' + s.key + '"]');
+      if (pres) {
+        pres.innerHTML = (SP_PRESETS[s.key] || []).map(function (t) {
+          var on = d[s.key].indexOf(t) >= 0;
+          return '<button class="chip' + (on ? ' is-on' : '') + '" data-action="sp-suggest" data-key="' + s.key + '" ' +
+            'data-text="' + esc(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(t) + '</button>';
+        }).join('');
+      }
+    });
+    var total = spCount();
+    var status = $('#sp-status');
+    if (status) {
+      status.textContent = total
+        ? '已写 ' + total + ' 条' + (d.updatedAt ? ' · 最后更新 ' + fmtDayTime(d.updatedAt) : '')
+        : '还没写。下面每节里的例子，点一下就能加进来。';
+    }
+    var badge = $('#safety-entry-badge');
+    if (badge) badge.textContent = total ? '已写 ' + total + ' 条' : '未写';
+    renderSafetyPrint(d);
+  }
+
+  function renderSafetyPrint(d) {
+    var host = $('#safety-print');
+    if (!host) return;
+    var out = ['<div class="pp__head"><b>我的安全计划</b><span>' + esc(fmtDateFull(new Date())) + '</span></div>'];
+    SP_SECTIONS.forEach(function (s) {
+      if (!d[s.key].length) return;
+      out.push('<div class="pp__block"><h3><span class="pp__k">' + s.n + '</span>' + esc(s.title) + '</h3><ul>' +
+        d[s.key].map(function (t) { return '<li>' + spTextHtml(t) + '</li>'; }).join('') + '</ul></div>');
+    });
+    out.push('<div class="pp__foot">12356 全国心理援助热线 · 010-82951332（北京 24 小时）· 120 / 110（紧急）</div>');
+    host.innerHTML = out.join('');
+  }
+
+  function spAdd(key, text) {
+    text = String(text || '').trim();
+    if (!text) return;
+    if (!SP_PRESETS[key] && !SP_SECTIONS.some(function (s) { return s.key === key; })) return;
+    var d = spData();
+    if (d[key].indexOf(text) >= 0) { showToast('这一条已经在里面了。'); return; }
+    d[key].push(text.slice(0, 200));
+    d.updatedAt = Date.now();
+    save();
+    renderSafety();
+  }
+
+  function spDel(key, i) {
+    var d = spData();
+    var t = d[key][i];
+    if (t == null) return;
+    d[key].splice(i, 1);
+    d.updatedAt = Date.now();
+    save();
+    renderSafety();
+    showToast('删掉了。', '撤销', function () {
+      var dd = spData();
+      dd[key].splice(Math.min(i, dd[key].length), 0, t);
+      dd.updatedAt = Date.now();
+      save();
+      renderSafety();
+    });
+  }
+
+  function printSafety() {
+    document.body.setAttribute('data-print', 'safety');
+    try { window.print(); } catch (e) { /* ignore */ }
+    setTimeout(function () { document.body.removeAttribute('data-print'); }, 1200);
   }
 
   /* ---------------- 路由 ---------------- */
@@ -617,7 +1220,7 @@
     });
   }
 
-  function openOverlay(id) {
+  function openOverlay(id, focusSel) {
     lastFocus = document.activeElement;
     var o = $(id);
     if (!o) return;
@@ -625,8 +1228,8 @@
     document.body.classList.add('is-locked');
     setBackgroundInert(true);
     hideToast();
-    var c = $('.panel__close', o);
-    if (c) setTimeout(function () { c.focus(); }, 40);
+    var f = (focusSel && $(focusSel, o)) || $('.panel__close', o);
+    if (f) setTimeout(function () { try { f.focus(); } catch (e) { /* ignore */ } }, 40);
   }
 
   function anyOverlayOpen() {
@@ -1583,7 +2186,44 @@
     if (th) th.value = state.settings.theme || 'auto';
     var mo = $('#setting-motion');
     if (mo) mo.value = state.settings.motion || 'auto';
+    var q = $('#setting-quick-exit');
+    if (q) q.value = state.settings.quickExit || 'search';
+    var qu = $('#setting-quick-url');
+    if (qu) {
+      qu.hidden = (state.settings.quickExit || 'search') !== 'custom';
+      if (document.activeElement !== qu) qu.value = state.settings.quickExitUrl || '';
+    }
+    renderPrivacy();
     refreshStorageNote();
+  }
+
+  function renderPrivacy() {
+    var badge = $('#lock-badge');
+    if (badge) {
+      badge.textContent = lock.on ? '已加密' : '未设口令';
+      badge.classList.toggle('badge--sage', lock.on);
+    }
+    var note = $('#lock-note');
+    if (note) {
+      note.textContent = lock.on
+        ? '已开启：每次打开都要输口令，本机记录是加密存放的。'
+        : '默认关闭。打开后每次进入要输口令，本机记录同时改成加密存放。';
+    }
+    var host = $('#priv-lock-actions');
+    if (!host) return;
+    if (!lock.on) {
+      host.innerHTML = '<button class="btn btn--ghost btn--sm" data-action="lock-set">设置口令</button>';
+      return;
+    }
+    var min = autoLockMin();
+    host.innerHTML = '<select id="setting-autolock" aria-label="多久没动就自动锁上">' +
+      [0, 1, 5, 15, 30].map(function (n) {
+        return '<option value="' + n + '"' + (n === min ? ' selected' : '') + '>' +
+          (n ? n + ' 分钟没动就锁' : '不自动锁') + '</option>';
+      }).join('') + '</select>' +
+      '<button class="btn btn--ghost btn--sm" data-action="lock-change">改口令</button>' +
+      '<button class="btn btn--ghost btn--sm" data-action="lock-now">立即锁上</button>' +
+      '<button class="btn btn--danger btn--sm" data-action="lock-off">关闭</button>';
   }
 
   /* ---------------- 导出 / 导入 / 清空 ---------------- */
@@ -1717,6 +2357,7 @@
     var metaEl = $('#import-meta');
     var countsEl = $('#import-counts');
     var parts = ['文件：' + pendingImport.name];
+    if (pendingImport.enc) parts.push('加密备份');
     if (meta) {
       var t = meta.exportedAt ? Date.parse(meta.exportedAt) : NaN;
       if (!isNaN(t)) parts.push('导出于 ' + fmtDayTime(t));
@@ -1747,6 +2388,59 @@
     if (countsEl) countsEl.innerHTML = rows.map(function (r) { return '<span>' + r[0] + ' <b>' + r[1] + '</b></span>'; }).join('');
   }
 
+  var pendingEnc = null;
+  var deferredImport = null;
+
+  function acceptParsed(parsed, name, fromEnc) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
+    if (parsed.app && parsed.app !== 'zhuolu') {
+      showToast('这不是着陆台的备份文件。');
+      return false;
+    }
+    var raw = parsed;
+    var meta = null;
+    var warning = '';
+    var blocked = false;
+    if (parsed.app === 'zhuolu' && parsed.data && typeof parsed.data === 'object') {
+      raw = parsed.data;
+      meta = parsed;
+      var sv = Number(parsed.schemaVersion) || 0;
+      if (sv > SCHEMA_VERSION) {
+        warning = '这份备份来自更新版本（格式 v' + sv + '），当前版本可能读不全。建议先升级应用，再导入。';
+        blocked = true;
+      }
+    }
+    var data = normalize(raw);
+    var total = data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length;
+    if (!total) warning = warning || '这份备份里没有可导入的记录。';
+    pendingImport = {
+      data: data,
+      meta: meta,
+      name: name,
+      total: total,
+      warning: warning,
+      blocked: blocked,
+      enc: !!fromEnc
+    };
+    renderImportDialog();
+    openOverlay('#import-overlay');
+    return true;
+  }
+
+  function openEncrypted(pass) {
+    if (!pendingEnc) return '没有待解开的文件。';
+    var enc = pendingEnc.env;
+    var name = pendingEnc.name;
+    return deriveKey(pass, enc.salt, enc.iter || KDF_ITER).then(function (key) {
+      return decryptText(key, enc.iv, enc.ct);
+    }).then(function (text) {
+      deferredImport = { parsed: JSON.parse(text), name: name };
+      return null;
+    }).catch(function () {
+      return '口令不对，或文件被改过。';
+    });
+  }
+
   function importJSON() {
     var input = document.createElement('input');
     input.type = 'file';
@@ -1756,46 +2450,76 @@
       if (!f) return;
       var reader = new FileReader();
       reader.onload = function () {
-        try {
-          var parsed = JSON.parse(String(reader.result));
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
-          if (parsed.app && parsed.app !== 'zhuolu') {
-            showToast('这不是着陆台的备份文件。');
-            return;
-          }
-          var raw = parsed;
-          var meta = null;
-          var warning = '';
-          var blocked = false;
-          if (parsed.app === 'zhuolu' && parsed.data && typeof parsed.data === 'object') {
-            raw = parsed.data;
-            meta = parsed;
-            var sv = Number(parsed.schemaVersion) || 0;
-            if (sv > SCHEMA_VERSION) {
-              warning = '这份备份来自更新版本（格式 v' + sv + '），当前版本可能读不全。建议先升级应用，再导入。';
-              blocked = true;
+        var parsed;
+        try { parsed = JSON.parse(String(reader.result)); }
+        catch (e) { showToast('这个文件读不出来，可能不是本工具的备份。'); return; }
+        if (parsed && parsed.enc && parsed.enc.ct && parsed.enc.iv && parsed.enc.salt) {
+          if (!cryptoOK) { showToast('这份备份是加密的，这个浏览器解不开（要用 HTTPS 或 localhost 打开）。'); return; }
+          pendingEnc = { env: parsed.enc, name: f.name };
+          openPass({
+            kicker: '加密备份',
+            title: '输入备份口令',
+            one: true,
+            oneLabel: '备份口令',
+            lede: '这份备份导出时设了口令。',
+            ok: '打开',
+            foot: '口令不对就打不开。文件里没有口令，忘了只能重新导出。',
+            run: function (v) { return openEncrypted(v.one); },
+            after: function () {
+              pendingEnc = null;
+              var job = deferredImport;
+              deferredImport = null;
+              if (!job) return;
+              try { acceptParsed(job.parsed, job.name, true); }
+              catch (e) { showToast('这份备份读不出来。'); }
             }
-          }
-          var data = normalize(raw);
-          var total = data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length;
-          if (!total) warning = warning || '这份备份里没有可导入的记录。';
-          pendingImport = {
-            data: data,
-            meta: meta,
-            name: f.name,
-            total: total,
-            warning: warning,
-            blocked: blocked
-          };
-          renderImportDialog();
-          openOverlay('#import-overlay');
-        } catch (e) {
-          showToast('这个文件读不出来，可能不是本工具的备份。');
+          });
+          return;
         }
+        try { acceptParsed(parsed, f.name, false); }
+        catch (e) { showToast('这个文件读不出来，可能不是本工具的备份。'); }
       };
       reader.readAsText(f, 'utf-8');
     };
     input.click();
+  }
+
+  function exportEncrypted(pass) {
+    if (!cryptoOK) return '这个浏览器不支持加密（要用 HTTPS 或 localhost 打开）。';
+    var salt = b64FromBytes(randBytes(16));
+    var payload = {
+      app: 'zhuolu',
+      schemaVersion: SCHEMA_VERSION,
+      appVersion: APP_VERSION,
+      exportedAt: new Date().toISOString(),
+      locked: true,
+      data: state
+    };
+    return deriveKey(pass, salt, KDF_ITER).then(function (key) {
+      return encryptText(key, JSON.stringify(payload));
+    }).then(function (out) {
+      var env = {
+        app: 'zhuolu',
+        enc: {
+          v: 1,
+          alg: 'AES-GCM-256',
+          kdf: 'PBKDF2-SHA256',
+          iter: KDF_ITER,
+          salt: salt,
+          iv: out.iv,
+          ct: out.ct
+        },
+        schemaVersion: SCHEMA_VERSION,
+        appVersion: APP_VERSION,
+        exportedAt: payload.exportedAt
+      };
+      state.settings.lastExportAt = Date.now();
+      save();
+      saveFile('zhuolu-backup-' + dayKey() + '.enc.json', JSON.stringify(env, null, 2),
+        'application/json;charset=utf-8', '已导出加密备份。口令不在文件里，别忘。');
+      renderAll();
+      return null;
+    }).catch(function () { return '加密没成功，换一个浏览器再试。'; });
   }
 
   function closeImport() {
@@ -2008,15 +2732,19 @@
   }
 
   function printPocket() {
-    window.print();
+    document.body.setAttribute('data-print', 'pocket');
+    try { window.print(); } catch (e) { /* ignore */ }
+    setTimeout(function () { document.body.removeAttribute('data-print'); }, 1200);
   }
 
   /* ---------------- 总渲染 ---------------- */
 
   function renderAll() {
+    if (!state) return;
     renderStorageAlert();
     renderTopbar();
     renderHome();
+    renderSafety();
     renderBackupNudge();
     renderWindow();
     renderRum();
@@ -2112,7 +2840,95 @@
     'clear-all': clearAll,
     'timer-start': toggleTimer,
     'timer-reset': resetTimer,
-    'shuffle-step': shuffleStep
+    'shuffle-step': shuffleStep,
+    'quick-exit': quickExit,
+    'sp-add': function (el) {
+      var key = el.getAttribute('data-key');
+      var input = $('#sp-input-' + key);
+      spAdd(key, input ? input.value : '');
+      if (input) { input.value = ''; input.focus(); }
+    },
+    'sp-suggest': function (el) {
+      var key = el.getAttribute('data-key');
+      var text = el.getAttribute('data-text');
+      var d = spData();
+      var i = d[key].indexOf(text);
+      if (i >= 0) { spDel(key, i); return; }
+      spAdd(key, text);
+    },
+    'sp-del': function (el) {
+      spDel(el.getAttribute('data-key'), Number(el.getAttribute('data-i')));
+    },
+    'print-safety': printSafety,
+    'lock-set': function () {
+      if (!cryptoOK) { showToast('这个浏览器不支持加密（要用 HTTPS 或 localhost 打开）。'); return; }
+      openPass({
+        kicker: '应用锁',
+        title: '设置一个口令',
+        lede: '设好之后，每次打开都要输口令；这台设备上的记录会改成加密存放。',
+        new: true,
+        new2: true,
+        newLabel: '新口令',
+        ok: '开启应用锁',
+        foot: '忘记口令就等于数据打不开。先去上面的「导出 JSON」存一份，再设。',
+        run: function (v) { return enableLock(v.np); },
+        after: function () { renderSettings(); showToast('应用锁已开启。'); }
+      });
+    },
+    'lock-change': function () {
+      openPass({
+        kicker: '应用锁',
+        title: '换一个口令',
+        cur: true,
+        new: true,
+        new2: true,
+        newLabel: '新口令',
+        ok: '改口令',
+        run: function (v) {
+          return verifyPass(v.cur).then(function (key) {
+            if (!key) return '当前口令不对。';
+            return changeLock(v.np);
+          });
+        },
+        after: function () { renderSettings(); showToast('口令已更新。'); }
+      });
+    },
+    'lock-off': function () {
+      if (!confirm('关闭应用锁？本机记录会改回明文存放。')) return;
+      openPass({
+        kicker: '应用锁',
+        title: '关闭应用锁',
+        lede: '关闭后不再需要口令，本机数据改回明文存放。',
+        cur: true,
+        ok: '关闭',
+        run: function (v) {
+          return verifyPass(v.cur).then(function (key) {
+            if (!key) return '当前口令不对。';
+            return disableLock();
+          });
+        },
+        after: function () { renderSettings(); showToast('应用锁已关闭。'); }
+      });
+    },
+    'lock-now': function () { lockNow(); },
+    'lock-forgot': lockForgot,
+    'unlock': tryUnlock,
+    'pass-submit': submitPass,
+    'pass-cancel': closePass,
+    'export-enc': function () {
+      if (!cryptoOK) { showToast('这个浏览器不支持加密（要用 HTTPS 或 localhost 打开）。'); return; }
+      openPass({
+        kicker: '加密备份',
+        title: '给备份设一个口令',
+        lede: '文件和本机记录一样，用这个口令加密。口令不进文件。',
+        new: true,
+        new2: true,
+        newLabel: '备份口令',
+        ok: '导出',
+        foot: '可以和应用锁口令不同。换设备时用「导入 JSON」选这份文件，再输这个口令。',
+        run: function (v) { return exportEncrypted(v.np); }
+      });
+    }
   };
 
   document.addEventListener('click', function (e) {
@@ -2248,9 +3064,41 @@
       save();
       applyTheme();
     }
+    if (t.id === 'setting-quick-exit') {
+      state.settings.quickExit = ['search', 'weather', 'blank', 'custom'].indexOf(t.value) >= 0 ? t.value : 'search';
+      save();
+      renderSettings();
+      showToast('快速离开改成：' + t.options[t.selectedIndex].text + '。');
+    }
+    if (t.id === 'setting-quick-url') {
+      var u = String(t.value || '').trim();
+      if (u && !/^https?:\/\/[^\s]+$/i.test(u)) { showToast('要写成 https:// 开头。'); return; }
+      state.settings.quickExitUrl = u.slice(0, 400);
+      save();
+      if (u) showToast('快速离开的网址记下了。');
+    }
+    if (t.id === 'setting-autolock') {
+      setAutoLock(Number(t.value) || 0);
+      showToast(Number(t.value) ? '不操作 ' + t.value + ' 分钟就自动锁上。' : '不会自动锁，只在重新打开时要求口令。');
+    }
   });
 
   document.addEventListener('keydown', function (e) {
+    var tgt = e.target;
+    if (e.key === 'Enter' && tgt && tgt.getAttribute) {
+      var spKey = tgt.getAttribute('data-sp-input');
+      if (spKey) {
+        e.preventDefault();
+        spAdd(spKey, tgt.value);
+        tgt.value = '';
+        return;
+      }
+      if (tgt.id === 'lock-pass') {
+        e.preventDefault();
+        tryUnlock();
+        return;
+      }
+    }
     if (e.key === 'Tab') {
       var open = null;
       $$('.overlay').forEach(function (o) { if (!o.hidden) open = o; });
@@ -2274,6 +3122,7 @@
       }
     }
     if (e.key === 'Escape') {
+      if ($('#pass-overlay') && !$('#pass-overlay').hidden) { closePass(); return; }
       if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
       if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
       if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) { closeIntercept(); return; }
@@ -2298,9 +3147,30 @@
     reviewResizeTimer = setTimeout(renderReview, 180);
   });
 
-  function init() {
+  var booted = false;
+
+  function bootApp() {
+    if (booted) { renderAll(); return; }
+    booted = true;
     applyTheme();
     initRanges();
+    renderAll();
+    updateInstallUI();
+    requestPersist();
+    if (!location.hash) {
+      location.replace('#/now');
+    } else {
+      renderRoute();
+    }
+    if (!storageOK) {
+      setTimeout(function () { showToast('这个浏览器不能保存记录：关掉页面就会消失，先导出。'); }, 900);
+    }
+    setInterval(updateWindowTimer, 1000);
+    startIdleWatch();
+  }
+
+  function init() {
+    applyTheme();
     var toastBtn = $('#toast-action');
     if (toastBtn) {
       toastBtn.addEventListener('click', function () {
@@ -2319,19 +3189,20 @@
         if (m) setTimeout(function () { try { m.focus(); } catch (e) { /* ignore */ } }, 0);
       });
     }
-    renderAll();
-    updateInstallUI();
-    requestPersist();
+    var passForm = $('#pass-form');
+    if (passForm) {
+      passForm.addEventListener('submit', function (e) { e.preventDefault(); submitPass(); });
+    }
+    var lockForm = $('#lock-form');
+    if (lockForm) {
+      lockForm.addEventListener('submit', function (e) { e.preventDefault(); tryUnlock(); });
+    }
     initSW();
-    if (!location.hash) {
-      location.replace('#/now');
-    } else {
-      renderRoute();
+    if (!lock.unlocked) {
+      showLock();
+      return;
     }
-    if (!storageOK) {
-      setTimeout(function () { showToast('这个浏览器不能保存记录：关掉页面就会消失，先导出。'); }, 900);
-    }
-    setInterval(updateWindowTimer, 1000);
+    bootApp();
   }
 
   if (document.readyState === 'loading') {

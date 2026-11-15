@@ -59,6 +59,17 @@
       ]
     },
     {
+      "name": "安全计划",
+      "short_name": "安全计划",
+      "url": "./#/safety",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "回顾",
       "short_name": "回顾",
       "url": "./#/review",

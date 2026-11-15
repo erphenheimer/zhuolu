@@ -44,7 +44,7 @@ CHROME_PATH = os.environ.get(
     "ZHUOLU_CHROME", r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 )
 KEY = "zhuolu.v1"
-ROUTES = ["now", "rumination", "certainty", "today", "more"]
+ROUTES = ["now", "rumination", "certainty", "today", "review", "safety", "more"]
 ROUTE_TITLES = {
     "now": "现在",
     "rumination": "反刍",
@@ -605,7 +605,7 @@ def _check_views(page):
         ".view.is-active", "els => els.map(el => el.getAttribute('data-view'))"
     )
     assert active == ["now"], "初始激活视图应为 now，实际 %s" % active
-    return "5 个基线视图齐全（页面共 %d 个），初始激活 now" % len(views)
+    return "%d 个基线视图齐全（页面共 %d 个），初始激活 now" % (len(ROUTES), len(views))
 
 
 # ---------------------------------------------------------------- B SOS 着陆
@@ -1992,6 +1992,376 @@ def _offline_routes(page, context):
         block_network(page, False)
 
 
+
+# ---------------------------------------------------------------- L 隐私与安全（0.4.0）
+
+LOCK_PASS = "qa-lock-2026"
+LOCK_PASS2 = "qa-lock-9876"
+ENC_PASS = "qa-backup-4321"
+SEED_TEXT = "QA-锁测试-记录"
+
+
+def _sp_sections(page):
+    count = page.eval_on_selector_all(".sp-step", "els => els.length")
+    assert count == 7, "安全计划应有 7 节，实际 %d" % count
+    titles = page.eval_on_selector_all(".sp-step .h3", "els => els.map(e => e.textContent.trim())")
+    assert all(titles), "有节标题为空"
+    empty = page.eval_on_selector_all(".sp-empty", "els => els.length")
+    assert empty == 7, "初始应 7 节都显示空态，实际 %d" % empty
+    status = page.inner_text("#sp-status")
+    assert "还没写" in status, "初始状态文案不对：%s" % status
+    return "7 节 · 标题 %s" % "／".join(titles[:2])
+
+
+def _sp_add(page):
+    page.fill("#sp-input-signals", "QA-安全计划-1")
+    page.press("#sp-input-signals", "Enter")
+    wait_text(page, "[data-sp-list='signals']", "QA-安全计划-1")
+    assert page.eval_on_selector("#sp-input-signals", "e => e.value") == "", "加入后输入框应清空"
+    state = app_state(page)
+    assert state["safety"]["signals"] == ["QA-安全计划-1"], "落盘内容不对: %s" % state["safety"]
+    assert state["safety"]["updatedAt"] > 0, "没有记录更新时间"
+    return "已写入 signals，落盘 1 条"
+
+
+def _sp_suggest(page):
+    chip = page.locator("[data-sp-presets='coping'] .chip").first
+    text = chip.inner_text().strip()
+    chip.click()
+    page.wait_for_function(
+        "([t]) => Array.from(document.querySelectorAll(\"[data-sp-list='coping'] .sp-item__t\"))"
+        ".some(e => e.textContent.trim() === t)",
+        arg=[text],
+    )
+    on = page.eval_on_selector(
+        "[data-sp-presets='coping'] .chip", "e => e.getAttribute('aria-pressed')"
+    )
+    assert on == "true", "加入后预置项应标记为已选"
+    page.locator("[data-sp-presets='coping'] .chip").first.click()
+    page.wait_for_function(
+        "() => !document.querySelector(\"[data-sp-list='coping'] .sp-item\")",
+    )
+    return "预置项「%s」加入 / 再点移除" % text
+
+
+def _sp_undo(page):
+    page.locator("[data-sp-list='signals'] [data-action='sp-del']").first.click()
+    visible(page, ".toast.is-on")
+    page.wait_for_function("() => !document.querySelector(\"[data-sp-list='signals'] .sp-item\")")
+    page.click("#toast-action")
+    wait_text(page, "[data-sp-list='signals']", "QA-安全计划-1")
+    return "删除后 6 秒内可撤销"
+
+
+def _sp_tel(page):
+    page.fill("#sp-input-people", "妈妈 13800138000")
+    page.press("#sp-input-people", "Enter")
+    href = page.wait_for_function(
+        "() => { const a = document.querySelector(\"[data-sp-list='people'] a\");"
+        " return a ? a.getAttribute('href') : null; }"
+    ).json_value()
+    assert href == "tel:13800138000", "号码应渲染成 tel: 链接，实际 %s" % href
+    return "tel:%s" % href.replace("tel:", "")
+
+
+def _sp_print(page):
+    html = page.eval_on_selector("#safety-print", "e => e.innerHTML")
+    assert "QA-安全计划-1" in html, "打印版没带上有内容的条目"
+    assert "12356" in html, "打印版缺少热线"
+    assert page.locator("#safety-print").is_hidden(), "打印版在屏幕上不应显示"
+    return "打印版 %d 字符，屏幕上隐藏" % len(html)
+
+
+def _sp_reload(page):
+    page.reload(wait_until="domcontentloaded")
+    wait_text(page, "[data-sp-list='signals']", "QA-安全计划-1")
+    wait_text(page, "[data-sp-list='people']", "13800138000")
+    assert page.locator(".sp-empty").count() < 7, "刷新后仍有整节空态"
+    return "刷新后 2 节内容都在"
+
+
+def _qe_settings(page):
+    assert page.eval_on_selector("#setting-quick-exit", "e => e.value") == "search", "默认目标应为搜索首页"
+    page.select_option("#setting-quick-exit", "custom")
+    visible(page, "#setting-quick-url")
+    page.fill("#setting-quick-url", "https://example.com/plain")
+    page.press("#setting-quick-url", "Tab")
+    page.wait_for_function(
+        "() => { const s = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
+        " return s.settings && s.settings.quickExit === 'custom'; }"
+    )
+    state = app_state(page)
+    assert state["settings"]["quickExitUrl"] == "https://example.com/plain", "自定义网址没存下"
+    return "默认 search → 自定义 %s" % state["settings"]["quickExitUrl"]
+
+
+def _qe_go(page):
+    page.select_option("#setting-quick-exit", "blank")
+    page.wait_for_timeout(150)
+    before = page.evaluate("() => history.length")
+    with page.expect_navigation(timeout=10000):
+        page.click("[data-action='quick-exit']")
+    after = page.evaluate("() => history.length")
+    assert page.url == "about:blank", "快速离开目标不对：%s" % page.url
+    assert after <= before, "快速离开不应该新增历史记录（%s → %s）" % (before, after)
+    return "跳到 about:blank，history %s → %s" % (before, after)
+
+
+def _lock_seed(page):
+    page.evaluate(
+        "(t) => localStorage.setItem('zhuolu.v1', JSON.stringify({"
+        "v: 1, rum: [{ id: 'qa-lock-1', t: Date.now(), kind: 'why', thought: t }] }))",
+        SEED_TEXT,
+    )
+    page.reload(wait_until="domcontentloaded")
+    wait_text(page, "#rec-rum", SEED_TEXT)
+
+
+def _lock_on(page):
+    _lock_seed(page)
+    page.click("[data-action='lock-set']")
+    visible(page, "#pass-overlay")
+    assert page.locator("#pass-cur-field").is_hidden(), "设置口令时不该要当前口令"
+    assert page.locator("#pass-new-field").is_visible(), "应有新口令输入"
+    page.fill("#pass-new", "12345")
+    page.fill("#pass-new2", "12345")
+    page.click("#pass-submit")
+    visible(page, "#pass-err")
+    assert "至少 6 位" in page.inner_text("#pass-err"), "太短的口令应被拒绝"
+    page.fill("#pass-new", LOCK_PASS)
+    page.fill("#pass-new2", LOCK_PASS + "x")
+    page.click("#pass-submit")
+    visible(page, "#pass-err")
+    assert "两次输入不一样" in page.inner_text("#pass-err"), "两次不一致应被拒绝"
+    page.fill("#pass-new", LOCK_PASS)
+    page.fill("#pass-new2", LOCK_PASS)
+    page.click("#pass-submit")
+    hidden(page, "#pass-overlay")
+    page.wait_for_function(
+        "() => { const e = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
+        " return e.locked === true && e.lock && !!e.lock.ct; }"
+    )
+    raw = page.evaluate("() => localStorage.getItem('zhuolu.v1')")
+    assert SEED_TEXT not in raw, "加密后本地仍有明文记录"
+    env = json.loads(raw)
+    assert sorted(env.keys()) == ["lock", "locked", "ui", "v"], "信封字段异常: %s" % sorted(env.keys())
+    assert env["lock"]["alg"] == "AES-GCM-256", "算法不对: %s" % env["lock"]["alg"]
+    assert env["lock"]["kdf"] == "PBKDF2-SHA256", "KDF 不对"
+    assert env["lock"]["iter"] >= 200000, "迭代次数太低: %s" % env["lock"]["iter"]
+    assert env["ui"]["theme"] in ("auto", "light", "dark"), "ui 镜像缺失"
+    assert page.inner_text("#lock-badge").strip() == "已加密", "徽标没更新"
+    return "信封 %s · iter %d · 密文 %d 字符" % (
+        "/".join(sorted(env.keys())),
+        env["lock"]["iter"],
+        len(env["lock"]["ct"]),
+    )
+
+
+def _lock_reload(page):
+    page.reload(wait_until="domcontentloaded")
+    visible(page, "#lock-overlay")
+    assert page.locator(".shell").get_attribute("inert") is not None, "锁屏时主界面应 inert"
+    assert SEED_TEXT not in page.evaluate("() => document.body.innerText"), "锁屏时 DOM 里不该有记录"
+    assert page.locator("#sos-overlay").is_hidden(), "锁屏时不该有其他浮层"
+    return "锁屏可见，DOM 无记录，主界面 inert"
+
+
+def _lock_bad(page):
+    page.fill("#lock-pass", "not-the-pass")
+    page.click("#lock-btn")
+    visible(page, "#lock-err")
+    assert "口令不对" in page.inner_text("#lock-err"), "错误口令应给出提示"
+    assert page.locator("#lock-overlay").is_visible(), "错误口令不该解锁"
+    return "错误口令被拒，锁屏保持"
+
+
+def _lock_unlock(page):
+    page.fill("#lock-pass", LOCK_PASS)
+    page.click("#lock-btn")
+    hidden(page, "#lock-overlay")
+    wait_text(page, "#rec-rum", SEED_TEXT)
+    assert "已解锁" in page.inner_text("#toast-msg"), "解锁后应有提示"
+    return "解锁成功，记录回到页面"
+
+
+def _lock_change(page):
+    page.click("[data-action='lock-change']")
+    visible(page, "#pass-overlay")
+    page.fill("#pass-cur", "wrong-one")
+    page.fill("#pass-new", LOCK_PASS2)
+    page.fill("#pass-new2", LOCK_PASS2)
+    page.click("#pass-submit")
+    visible(page, "#pass-err")
+    assert "当前口令不对" in page.inner_text("#pass-err"), "改口令应校验当前口令"
+    page.fill("#pass-cur", LOCK_PASS)
+    page.click("#pass-submit")
+    hidden(page, "#pass-overlay")
+    page.wait_for_timeout(500)
+    page.reload(wait_until="domcontentloaded")
+    visible(page, "#lock-overlay")
+    page.fill("#lock-pass", LOCK_PASS)
+    page.click("#lock-btn")
+    visible(page, "#lock-err")
+    page.fill("#lock-pass", LOCK_PASS2)
+    page.click("#lock-btn")
+    hidden(page, "#lock-overlay")
+    assert SEED_TEXT in page.evaluate("() => document.body.innerText"), "改口令后记录丢了"
+    return "旧口令失效，新口令可用，记录完整"
+
+
+def _lock_off(page):
+    page.once("dialog", lambda d: d.accept())
+    page.click("[data-action='lock-off']")
+    visible(page, "#pass-overlay")
+    page.fill("#pass-cur", LOCK_PASS2)
+    page.click("#pass-submit")
+    hidden(page, "#pass-overlay")
+    page.wait_for_function(
+        "() => { const s = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
+        " return s.locked !== true && Array.isArray(s.rum); }"
+    )
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_timeout(400)
+    assert page.locator("#lock-overlay").is_hidden(), "关锁后不该再出现锁屏"
+    wait_text(page, "#rec-rum", SEED_TEXT)
+    assert page.inner_text("#lock-badge").strip() == "未设口令", "徽标没复位"
+    return "回到明文存放，刷新不再要口令"
+
+
+def _enc_export(page, holder):
+    page.evaluate(
+        "(t) => localStorage.setItem('zhuolu.v1', JSON.stringify({"
+        "v: 1, rum: [{ id: 'qa-enc-1', t: Date.now(), kind: 'why', thought: t }] }))",
+        SEED_TEXT,
+    )
+    page.reload(wait_until="domcontentloaded")
+    wait_text(page, "#rec-rum", SEED_TEXT)
+    page.click("[data-action='export-enc']")
+    visible(page, "#pass-overlay")
+    page.fill("#pass-new", ENC_PASS)
+    page.fill("#pass-new2", ENC_PASS)
+    with page.expect_download(timeout=20000) as info:
+        page.click("#pass-submit")
+    download = info.value
+    path = download.path()
+    text = Path(path).read_text(encoding="utf-8") if path else ""
+    holder["text"] = text
+    holder["name"] = download.suggested_filename
+    hidden(page, "#pass-overlay")
+    return len(text)
+
+
+def _enc_structure(holder):
+    assert holder.get("text"), "没有拿到加密备份内容"
+    data = json.loads(holder["text"])
+    assert sorted(data.keys()) == ["app", "appVersion", "enc", "exportedAt", "schemaVersion"], (
+        "加密备份顶层字段异常: %s" % sorted(data.keys())
+    )
+    assert data["app"] == "zhuolu", "app 标记缺失"
+    assert data["enc"]["alg"] == "AES-GCM-256", "算法不对"
+    assert data["enc"]["kdf"] == "PBKDF2-SHA256", "KDF 不对"
+    for key in ("salt", "iv", "ct"):
+        assert data["enc"][key], "缺字段 %s" % key
+    assert SEED_TEXT not in holder["text"], "加密备份里出现了明文"
+    assert holder["name"].endswith(".enc.json"), "文件名应标明加密: %s" % holder["name"]
+    return "%s · %d 字节 · 无明文" % (holder["name"], len(holder["text"]))
+
+
+def _enc_import_bad(page, fixture):
+    with page.expect_file_chooser(timeout=15000) as chooser:
+        page.click("[data-action='import-json']")
+    chooser.value.set_files(str(fixture))
+    visible(page, "#pass-overlay")
+    assert page.eval_on_selector("#pass-title", "e => e.textContent") == "输入备份口令", "应弹出口令框"
+    assert page.locator("#pass-one-field").is_visible(), "加密备份只需一个口令框"
+    page.fill("#pass-one", "wrong-backup-pass")
+    page.click("#pass-submit")
+    visible(page, "#pass-err")
+    assert "口令不对" in page.inner_text("#pass-err"), "错误口令应被拒绝"
+    assert page.locator("#import-overlay").is_hidden(), "口令不对时不该进入预览"
+    return "错误口令被拒，未进入预览"
+
+
+def _enc_import_ok(page):
+    page.fill("#pass-one", ENC_PASS)
+    page.click("#pass-submit")
+    hidden(page, "#pass-overlay")
+    visible(page, "#import-overlay")
+    meta = page.inner_text("#import-meta")
+    assert "加密备份" in meta, "预览里应标明是加密备份: %s" % meta
+    assert "反刍 1" in page.inner_text("#import-counts").replace("\n", " "), "预览条数不对"
+    page.click("[data-action='import-merge']")
+    hidden(page, "#import-overlay")
+    wait_text(page, "#rec-rum", SEED_TEXT)
+    return "口令正确 → 预览 → 合并成功"
+
+
+def group_privacy(run):
+    desktop = {"viewport": {"width": 1280, "height": 900}}
+
+    session = Session(run, **desktop)
+    page = session.open("safety")
+    run.check("隐私与安全", "安全计划 7 节渲染", lambda: _sp_sections(page), page)
+    run.check("隐私与安全", "安全计划：回车添加并落盘", lambda: _sp_add(page), page)
+    run.check("隐私与安全", "安全计划：预置项加入 / 再点移除", lambda: _sp_suggest(page), page)
+    run.check("隐私与安全", "安全计划：删除后可撤销", lambda: _sp_undo(page), page)
+    run.check("隐私与安全", "安全计划：号码变拨号链接", lambda: _sp_tel(page), page)
+    run.check("隐私与安全", "安全计划：打印版齐全且屏幕隐藏", lambda: _sp_print(page), page)
+    run.check("隐私与安全", "安全计划：刷新后仍在", lambda: _sp_reload(page), page)
+    run.check(
+        "隐私与安全",
+        "320px 安全计划无横向溢出",
+        lambda: _safety_overflow(page),
+        page,
+    )
+    session.close()
+
+    session = Session(run, **desktop)
+    page = session.open("more")
+    run.check("隐私与安全", "快速离开：默认值与自定义保存", lambda: _qe_settings(page), page)
+    run.check("隐私与安全", "快速离开：跳转不写进历史", lambda: _qe_go(page), page)
+    session.close()
+
+    session = Session(run, **desktop)
+    page = session.open("more")
+    run.check("隐私与安全", "应用锁：口令校验与密文落盘", lambda: _lock_on(page), page)
+    run.check("隐私与安全", "应用锁：刷新后锁屏且不渲染记录", lambda: _lock_reload(page), page)
+    run.check("隐私与安全", "应用锁：错误口令被拒绝", lambda: _lock_bad(page), page)
+    run.check("隐私与安全", "应用锁：正确口令解锁", lambda: _lock_unlock(page), page)
+    run.check("隐私与安全", "应用锁：改口令后旧口令失效", lambda: _lock_change(page), page)
+    run.check("隐私与安全", "应用锁：关闭后回到明文", lambda: _lock_off(page), page)
+    session.close()
+
+    holder = {}
+    session = Session(run, **desktop)
+    page = session.open("more")
+    run.check(
+        "隐私与安全",
+        "加密备份：导出触发下载",
+        lambda: "%d 字节" % _enc_export(page, holder),
+        page,
+    )
+    run.check("隐私与安全", "加密备份：结构正确且无明文", lambda: _enc_structure(holder), page)
+    session.close()
+
+    fixture = run.out_dir / "fixtures" / "enc-backup.json"
+    fixture.write_text(holder.get("text", ""), encoding="utf-8")
+    session = Session(run, **desktop)
+    page = session.open("more")
+    run.check("隐私与安全", "加密备份：错误口令打不开", lambda: _enc_import_bad(page, fixture), page)
+    run.check("隐私与安全", "加密备份：正确口令导入", lambda: _enc_import_ok(page), page)
+    session.close()
+
+
+def _safety_overflow(page):
+    page.set_viewport_size({"width": 320, "height": 720})
+    nav(page, "safety")
+    detail = assert_no_overflow(page, "320px #/safety")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    nav(page, "safety")
+    return detail
+
+
 # ---------------------------------------------------------------- K 全局汇总
 
 
@@ -2067,6 +2437,7 @@ GROUPS = [
     ("320px 布局", group_layout),
     ("iPhone UA", group_ios),
     ("PWA / 离线", group_pwa),
+    ("隐私与安全", group_privacy),
     ("全局汇总", group_global),
 ]
 
