@@ -41,21 +41,40 @@ function run(cmd, args, opts = {}) {
 }
 
 // Account ID 不再要求手填：这个 token 有账户级权限，能列出自己所在的账户
+async function getJson(url, t) {
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + t } });
+  return res.json();
+}
+
+// /accounts 会按 token 权限过滤（只有 Pages:Edit 的 token 常常返回空列表），
+// 所以再试一次 /memberships —— 它按"用户属于哪个账户"来列，和 Pages 权限无关。
 async function resolveAccount(t) {
   try {
-    const res = await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=50', {
-      headers: { Authorization: 'Bearer ' + t }
-    });
-    const json = await res.json();
+    const json = await getJson('https://api.cloudflare.com/client/v4/accounts?per_page=50', t);
     const list = json.result || [];
     if (list.length === 1) return list[0].id;
     if (list.length > 1) {
       console.log('  这个 token 能看到多个账户，请手动设置 CLOUDFLARE_ACCOUNT_ID');
       return null;
     }
-    console.log('  列不出账户：' + JSON.stringify((json.errors || []).slice(0, 2)));
   } catch (err) {
-    console.log('  查询账户失败：' + err.message);
+    console.log('  查询 /accounts 失败：' + err.message);
+  }
+  try {
+    const json = await getJson('https://api.cloudflare.com/client/v4/memberships?per_page=50&status=accepted', t);
+    const list = (json.result || []).filter((m) => m.account && m.account.id);
+    if (list.length === 1) {
+      console.log('  账户名 ' + (list[0].account.name || '(未命名)'));
+      return list[0].account.id;
+    }
+    if (list.length > 1) {
+      console.log('  属于多个账户，请手动设置 CLOUDFLARE_ACCOUNT_ID：');
+      for (const m of list) console.log('    ' + m.account.id + '  ' + (m.account.name || ''));
+      return null;
+    }
+    console.log('  /memberships 也列不出账户');
+  } catch (err) {
+    console.log('  查询 /memberships 失败：' + err.message);
   }
   return null;
 }
@@ -97,7 +116,19 @@ step('确认账户');
 if (!account) {
   account = await resolveAccount(token);
   if (!account) {
-    console.error('无法从 token 自动读出 Account ID，请手动设置 CLOUDFLARE_ACCOUNT_ID 后重试。');
+    console.error([
+      '',
+      '读不出 Account ID：只有 Pages 权限的 token 通常列不出账户列表，这是 Cloudflare 的行为，不是 token 配错了。',
+      '',
+      '最快的拿法：在 Cloudflare 面板随便打开一页，看浏览器地址栏：',
+      '  https://dash.cloudflare.com/023e105f4ecef8ad9ca31a8372d0c353/workers-and-pages',
+      '                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 这一串就是 Account ID',
+      '',
+      '然后在同一个 PowerShell 窗口里补一句再跑：',
+      '  $env:CLOUDFLARE_ACCOUNT_ID = "那一串"',
+      '  npm run deploy',
+      ''
+    ].join('\n'));
     process.exit(2);
   }
   console.log('  Account ID ' + account + '（从 token 自动识别）');
