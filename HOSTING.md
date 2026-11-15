@@ -29,15 +29,16 @@ npm run deploy  # 打包 + 上传 Cloudflare Pages + 线上自检（需要 token
 
 ### B. 命令行（一次配好，之后一条命令）
 
-1. 面板右侧头像 → My Profile → API Tokens → Create Token → Custom token
+1. 面板右侧头像 → My Profile → API Tokens → Create Token → **Custom token → 从头开始**
 2. 权限**只勾一项**：`Account · Cloudflare Pages · Edit`；TTL 设 1 天
 3. 当前终端里：
 
 ```powershell
 $env:CLOUDFLARE_API_TOKEN = "粘贴 token"
-$env:CLOUDFLARE_ACCOUNT_ID = "面板右侧的 Account ID"
 npm run deploy
 ```
+
+Account ID 不用手填：脚本会拿这个 token 去列账户，只有一个账户时自动使用（想指定就设 `CLOUDFLARE_ACCOUNT_ID`）。
 
 这个 token 在权限上读不到 DNS、看不到域名列表——不是靠自觉，是靠权限边界。
 

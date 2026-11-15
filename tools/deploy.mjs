@@ -31,13 +31,33 @@ function run(cmd, args, opts = {}) {
     stdio: opts.capture ? 'pipe' : 'inherit',
     encoding: 'utf8',
     shell: useShell,
-    env: process.env
+    env: Object.assign({}, process.env, opts.env || {})
   });
   if (res.status !== 0) {
     const detail = opts.capture ? String(res.stderr || '') + String(res.stdout || '') : '';
     throw new Error(cmd + ' 失败（退出码 ' + res.status + '）' + (detail ? '\n' + detail.slice(-1200) : ''));
   }
   return String(res.stdout || '');
+}
+
+// Account ID 不再要求手填：这个 token 有账户级权限，能列出自己所在的账户
+async function resolveAccount(t) {
+  try {
+    const res = await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=50', {
+      headers: { Authorization: 'Bearer ' + t }
+    });
+    const json = await res.json();
+    const list = json.result || [];
+    if (list.length === 1) return list[0].id;
+    if (list.length > 1) {
+      console.log('  这个 token 能看到多个账户，请手动设置 CLOUDFLARE_ACCOUNT_ID');
+      return null;
+    }
+    console.log('  列不出账户：' + JSON.stringify((json.errors || []).slice(0, 2)));
+  } catch (err) {
+    console.log('  查询账户失败：' + err.message);
+  }
+  return null;
 }
 
 step('构建与打包');
@@ -50,7 +70,7 @@ if (dryRun) {
 }
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
-const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+let account = process.env.CLOUDFLARE_ACCOUNT_ID;
 if (!token) {
   console.error([
     '',
@@ -73,17 +93,30 @@ if (!token) {
   process.exit(2);
 }
 
+step('确认账户');
+if (!account) {
+  account = await resolveAccount(token);
+  if (!account) {
+    console.error('无法从 token 自动读出 Account ID，请手动设置 CLOUDFLARE_ACCOUNT_ID 后重试。');
+    process.exit(2);
+  }
+  console.log('  Account ID ' + account + '（从 token 自动识别）');
+} else {
+  console.log('  Account ID ' + account);
+}
+
+const deployEnv = { CLOUDFLARE_ACCOUNT_ID: account, CI: 'true' };
 step('上传到 Cloudflare Pages');
 try {
-  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true']);
+  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true'], { env: deployEnv });
 } catch (err) {
   console.log('首次部署可能要先建项目，重试一次……');
   try {
-    run('npx', ['--yes', 'wrangler@4', 'pages', 'project', 'create', project, '--production-branch', 'main']);
+    run('npx', ['--yes', 'wrangler@4', 'pages', 'project', 'create', project, '--production-branch', 'main'], { env: deployEnv });
   } catch {
     /* 项目已存在时会报错，忽略 */
   }
-  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true']);
+  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true'], { env: deployEnv });
 }
 
 step('线上自检');
