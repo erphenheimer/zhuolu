@@ -67,13 +67,15 @@ Account ID 不用手填：脚本会拿这个 token 去列账户，只有一个�
 | 注册邮箱 | 待填 |
 | 是否开 2FA | 待填 |
 | 项目名 | zhuolu |
-| 线上地址 | 部署后填 |
-| 首次部署日期 | 部署后填 |
-| token 保存位置 | 不保存；每次临时设、TTL 1 天 |
+| 线上地址 | https://zhuolu.pages.dev/ |
+| 首次部署日期 | 2026-11-15 |
+| 登录方式 | `npx wrangler login` 的浏览器登录态（本机 `%APPDATA%\xdg.config\.wrangler`），不使用长期 token |
 
 ## 6. 两个已经踩过的坑
 
-**页面 CSP 会被 Service Worker 继承。** 页面那份 `default-src 'none'` 如果也发给 `/sw.js`，SW 自己的 `fetch()` 就被自己的 CSP 挡住：刷新直接 `ERR_FAILED`，Cache Storage 里 0 条。所以 `_headers` 里给 `/sw.js` 单独写了一份带 `connect-src 'self'` 的 CSP。改 CSP 之后必须重跑一次 `npm test` 加真机离线验证。
+**Cloudflare Pages 对重名响应头是"追加"，不是"覆盖"。** 写两条 `Content-Security-Policy`，线上会被逗号拼成一条，两条策略同时生效、取最严的那份。所以"给 `/sw.js` 单独一份 CSP"这种写法在本地服务器上生效、上线后失效——第一次部署就是这样翻的车：刷新 `ERR_FAILED`、Cache Storage 0 条。
+
+**页面 CSP 会被 Service Worker 继承。** SW 会拿脚本响应头里的 CSP 当自己的策略，`default-src 'none'` 会把它自己的 `fetch()` 挡死。所以现在全站只有一条 CSP，并且必须带 `connect-src 'self'`。改 CSP 之后必须重跑一次 `npm test`，并且**部署后再跑一次** `python tools/qa.py --url https://zhuolu.pages.dev/`——本地过不代表线上过。
 
 **GitHub Pages 项目页在这台机器上用不了。** 用户站的 `erphenheimer.de5.net` 自定义域会把 `/zhuolu/` 这类项目页 301 走，且 Cloudflare 返回 526。别在这上面浪费时间。
 

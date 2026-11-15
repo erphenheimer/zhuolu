@@ -10,6 +10,9 @@
 - 新增 `tools/deploy.mjs`：上传 Cloudflare Pages 并做线上自检（状态码、CSP 响应头、SW / manifest / 图标 MIME），无 token 时打印一步一步的指引后退出
 - 新增 `_headers`：CSP（`default-src 'none'`，只允许本站脚本、样式、图标）、`nosniff`、禁止被嵌入、`no-referrer`、权限策略、缓存策略
 - 新增 `HOSTING.md`：托管边界（只用平台免费子域、不碰任何域名、只允许一个平台）、部署步骤、上线自检清单、回滚方式
+- 线上地址 <https://zhuolu.pages.dev/>（Cloudflare Pages，免费子域，域名零改动）
+- 修复：Cloudflare Pages 对重名响应头是"追加"而非"覆盖"，两份 CSP 会被拼成一条并同时生效，导致 Service Worker 继承 `default-src 'none'`、自己的 fetch 被自己挡死（刷新 `ERR_FAILED`、缓存 0 条）。改为全站一条 CSP，并带 `connect-src 'self'`
+- 修复 `tools/qa.py` 的离线测试：`context.set_offline()` 对 localhost 不生效（本地永远是假离线），对远端又会连 Service Worker 一起掐掉；改用 CDP 屏蔽全部请求；同时把"本站"判定从写死的 127.0.0.1 改成按本次测试域名
 
 ## 0.3.0 — 2026-11-14
 

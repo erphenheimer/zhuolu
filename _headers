@@ -1,20 +1,18 @@
 # 着陆台 · 静态托管响应头
 # Cloudflare Pages / Netlify 通用格式（同名文件、同一套语法）。
-# 本地开发时 tools/serve.mjs 读取本文件，应用与线上完全一致的响应头。
+# 本地开发时 tools/serve.mjs 读取本文件，应用与线上一致的响应头。
+#
+# 注意：Cloudflare Pages 对同一条响应头是"追加"而不是"覆盖"。写两条 CSP 会被
+# 逗号拼成一条，两条策略同时生效、取最严的那份。所以这里只允许存在一条 CSP。
+#
+# 这条 CSP 必须带 connect-src 'self'：Service Worker 会继承脚本响应头里的 CSP，
+# 页面那份 default-src 'none' 一旦落到 /sw.js 上，SW 自己的 fetch 会被自己挡死，
+# 表现为刷新 ERR_FAILED、Cache Storage 0 条。
 
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Cache-Control: public, max-age=0, must-revalidate
-
-# Service Worker 有自己的一份 CSP：它要用 fetch 更新缓存、要读 Cache Storage，
-# 直接继承页面那份 default-src 'none' 会让它在控制页面后把导航请求也拦死。
-/sw.js
-  Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:
-
-# 图标文件带内容哈希式的稳定名字，可以长缓存
-/icons/*
-  Cache-Control: public, max-age=604800

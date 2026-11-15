@@ -10,7 +10,7 @@
 
 ## 使用
 
-**在线版（PWA，可装到主屏 / 桌面）**：部署在 Cloudflare Pages，打开网页后按提示安装。自己搭一份也很简单，见下面「本地运行」与 [HOSTING.md](HOSTING.md)。
+**在线版（PWA，可装到主屏 / 桌面）**：<https://zhuolu.pages.dev/> —— 打开网页后按提示安装。自己搭一份也很简单，见下面「本地运行」与 [HOSTING.md](HOSTING.md)。
 
 - iPhone / iPad：用 Safari 打开 → 点「分享」→「添加到主屏幕」
 - Android：用 Chrome 打开 → 右上角菜单 →「安装应用」/「添加到主屏幕」

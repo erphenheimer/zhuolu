@@ -90,6 +90,9 @@ def wait_port(port, timeout=20.0):
     raise RuntimeError("本地 HTTP 服务端口 %d 在 %.0f 秒内没有就绪" % (port, timeout))
 
 
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
 def is_local_url(url):
     if url.startswith(("data:", "blob:", "about:", "chrome-extension:", "chrome:", "devtools:")):
         return True
@@ -97,7 +100,7 @@ def is_local_url(url):
         host = urllib.parse.urlparse(url).hostname
     except Exception:
         return False
-    return host in ("127.0.0.1", "localhost", "::1")
+    return host in ALLOWED_HOSTS
 
 
 def is_http(url):
@@ -1949,8 +1952,20 @@ def _sw_registered(page):
     )
 
 
+def block_network(page, blocked):
+    """真正断开网络：CDP 屏蔽全部请求。
+
+    不用 context.set_offline()：Chrome 的网络模拟对 localhost 不生效，
+    本地跑永远是"假离线"；对远端站点又会连 Service Worker 一起掐掉，
+    结果测的是模拟器行为，不是"缓存能不能顶住"。
+    """
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Network.enable")
+    cdp.send("Network.setBlockedURLs", {"urls": ["*"] if blocked else []})
+
+
 def _offline_reload(page, context):
-    context.set_offline(True)
+    block_network(page, True)
     page.reload(wait_until="domcontentloaded")
     visible(page, ".view[data-view='now'].is-active")
     assert page.locator(".bottom-nav").is_visible(), "离线后底部导航不可见"
@@ -1974,7 +1989,7 @@ def _offline_routes(page, context):
         visible(page, ".view[data-view='now'].is-active")
         return "离线时可切换 更多/今日/现在，打卡状态保留"
     finally:
-        context.set_offline(False)
+        block_network(page, False)
 
 
 # ---------------------------------------------------------------- K 全局汇总
@@ -2059,6 +2074,7 @@ def main(argv=None):
     server = None
     if args.url:
         base, index_url = split_base_url(args.url)
+        ALLOWED_HOSTS.add((urllib.parse.urlparse(base).hostname or "").lower())
     else:
         serve_root = Path(args.serve_dir).resolve() if args.serve_dir else REPO_ROOT
         if not (serve_root / "index.html").exists():
