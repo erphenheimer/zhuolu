@@ -17,6 +17,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const project = process.env.ZHUOLU_PAGES_PROJECT || 'zhuolu';
 const dryRun = process.argv.includes('--dry-run');
+const argAccount = (() => {
+  const i = process.argv.indexOf('--account');
+  return i > -1 ? process.argv[i + 1] : null;
+})();
 
 function step(msg) {
   console.log('\n== ' + msg + ' ==');
@@ -79,6 +83,32 @@ async function resolveAccount(t) {
   return null;
 }
 
+// 只读诊断：token 本身是否有效、两个账户接口各自怎么回
+async function diagnose(t) {
+  const show = (label, obj) => {
+    const errs = (obj && obj.errors) || [];
+    console.log('  ' + label.padEnd(16) + 'success=' + (obj && obj.success) + ' result=' +
+      (Array.isArray(obj && obj.result) ? obj.result.length + ' 条' : '-') +
+      (errs.length ? ' errors=' + JSON.stringify(errs.slice(0, 2)) : ''));
+  };
+  try {
+    show('/tokens/verify', await getJson('https://api.cloudflare.com/client/v4/user/tokens/verify', t));
+  } catch (err) {
+    console.log('  /tokens/verify 请求失败：' + err.message);
+  }
+  try {
+    show('/accounts', await getJson('https://api.cloudflare.com/client/v4/accounts?per_page=50', t));
+  } catch (err) {
+    console.log('  /accounts 请求失败：' + err.message);
+  }
+  try {
+    show('/memberships', await getJson('https://api.cloudflare.com/client/v4/memberships?per_page=50&status=accepted', t));
+  } catch (err) {
+    console.log('  /memberships 请求失败：' + err.message);
+  }
+  console.log('');
+}
+
 step('构建与打包');
 run(process.execPath, ['tools/pack.mjs']);
 if (!fs.existsSync(path.join(root, 'dist', 'index.html'))) throw new Error('dist/index.html 不存在');
@@ -89,7 +119,7 @@ if (dryRun) {
 }
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
-let account = process.env.CLOUDFLARE_ACCOUNT_ID;
+let account = argAccount || process.env.CLOUDFLARE_ACCOUNT_ID;
 if (!token) {
   console.error([
     '',
@@ -115,7 +145,9 @@ if (!token) {
 step('确认账户');
 if (!account) {
   account = await resolveAccount(token);
+
   if (!account) {
+    await diagnose(token);
     console.error([
       '',
       '读不出 Account ID：只有 Pages 权限的 token 通常列不出账户列表，这是 Cloudflare 的行为，不是 token 配错了。',
