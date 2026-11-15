@@ -35,7 +35,11 @@ function run(cmd, args, opts = {}) {
     stdio: opts.capture ? 'pipe' : 'inherit',
     encoding: 'utf8',
     shell: useShell,
-    env: Object.assign({}, process.env, opts.env || {})
+    env: (() => {
+      const env = Object.assign({}, process.env, opts.env || {});
+      for (const k of opts.dropEnv || []) delete env[k];
+      return env;
+    })()
   });
   if (res.status !== 0) {
     const detail = opts.capture ? String(res.stderr || '') + String(res.stdout || '') : '';
@@ -120,66 +124,68 @@ if (dryRun) {
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 let account = argAccount || process.env.CLOUDFLARE_ACCOUNT_ID;
-if (!token) {
-  console.error([
-    '',
-    '缺少 CLOUDFLARE_API_TOKEN，无法部署。',
-    '',
-    '一次性做法（GitHub Pages 已经在用，Cloudflare 免费）：',
-    '  1. 注册 / 登录 https://dash.cloudflare.com',
-    '  2. 右侧头像 → My Profile → API Tokens → Create Token → Custom token',
-    '     权限只给一项：Account · Cloudflare Pages · Edit',
-    '     账号资源选自己的账号，TTL 设成 1 天（部署完就失效）',
-    '  3. 复制 token，在本机 PowerShell 里执行：',
-    '       $env:CLOUDFLARE_API_TOKEN = "粘贴 token"',
-    '       $env:CLOUDFLARE_ACCOUNT_ID = "面板右侧的 Account ID"',
-    '       npm run deploy',
-    '',
-    '这个 token 在权限上碰不到 DNS，也看不到你的域名。',
-    '不想开账号：把 dist/ 目录直接拖进 Cloudflare Pages 的「直接上传」也等价。',
-    ''
-  ].join('\n'));
-  process.exit(2);
+
+// 文档里的示例 ID 长得和真的一样，被复制走过一次，这里挡死
+const PLACEHOLDER_IDS = ['023e105f4ecef8ad9ca31a8372d0c353', '4a7c8f2d9b1e3a506c7d8e9f0a1b2c3d'];
+if (account && PLACEHOLDER_IDS.includes(String(account).toLowerCase())) {
+  console.log('');
+  console.log('  ' + account + ' 是文档里的示例 ID，不是你账户的 ID，已忽略。');
+  console.log('  真 ID 在 Cloudflare 面板地址栏那 32 位十六进制里。');
+  account = null;
 }
 
 step('确认账户');
-if (!account) {
+if (!account && token) {
   account = await resolveAccount(token);
-
   if (!account) {
     await diagnose(token);
-    console.error([
-      '',
-      '读不出 Account ID：只有 Pages 权限的 token 通常列不出账户列表，这是 Cloudflare 的行为，不是 token 配错了。',
-      '',
-      '最快的拿法：在 Cloudflare 面板随便打开一页，看浏览器地址栏：',
-      '  https://dash.cloudflare.com/023e105f4ecef8ad9ca31a8372d0c353/workers-and-pages',
-      '                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 这一串就是 Account ID',
-      '',
-      '然后在同一个 PowerShell 窗口里补一句再跑：',
-      '  $env:CLOUDFLARE_ACCOUNT_ID = "那一串"',
-      '  npm run deploy',
-      ''
-    ].join('\n'));
-    process.exit(2);
+    console.log('  token 读不出账户，改用 wrangler 的浏览器登录态继续（需要先 npx wrangler login）');
+  } else {
+    console.log('  Account ID ' + account + '（从 token 自动识别）');
   }
-  console.log('  Account ID ' + account + '（从 token 自动识别）');
-} else {
+} else if (account) {
   console.log('  Account ID ' + account);
+} else {
+  console.log('  没有 token，也没有 Account ID：交给 wrangler 的浏览器登录态');
+  console.log('  从没登录过的话，先在另一个窗口跑一次：npx wrangler login');
 }
 
-const deployEnv = { CLOUDFLARE_ACCOUNT_ID: account, CI: 'true' };
+const deployEnv = { CI: 'true' };
+if (account) deployEnv.CLOUDFLARE_ACCOUNT_ID = account;
+
+const dropEnv = account ? [] : ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
+const wranglerArgs = ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true'];
 step('上传到 Cloudflare Pages');
 try {
-  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true'], { env: deployEnv });
+  run('npx', wranglerArgs, { env: deployEnv, dropEnv });
 } catch (err) {
   console.log('首次部署可能要先建项目，重试一次……');
   try {
-    run('npx', ['--yes', 'wrangler@4', 'pages', 'project', 'create', project, '--production-branch', 'main'], { env: deployEnv });
+    run('npx', ['--yes', 'wrangler@4', 'pages', 'project', 'create', project, '--production-branch', 'main'], { env: deployEnv, dropEnv });
   } catch {
     /* 项目已存在时会报错，忽略 */
   }
-  run('npx', ['--yes', 'wrangler@4', 'pages', 'deploy', 'dist', '--project-name', project, '--branch', 'main', '--commit-dirty=true'], { env: deployEnv });
+  try {
+    run('npx', wranglerArgs, { env: deployEnv, dropEnv });
+  } catch (second) {
+    const msg = String(second.message || '');
+    if (/code: 10000|Authentication error/i.test(msg)) {
+      console.error([
+        '',
+        '认证失败（Cloudflare code 10000），只可能是这三种之一：',
+        '  1. Account ID 不对，不是你 token 所属的那个账户',
+        '  2. token 没复制完整，或者已经过期',
+        '  3. token 权限里没有 Account · Cloudflare Pages · Edit',
+        '',
+        '最省事的绕法（不用 token、不用 Account ID）：',
+        '  npx wrangler login      # 浏览器里点一次允许',
+        '  npm run deploy',
+        ''
+      ].join('\n'));
+      process.exit(1);
+    }
+    throw second;
+  }
 }
 
 step('线上自检');
