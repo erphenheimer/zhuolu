@@ -273,7 +273,10 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   gap: 16px;
   padding: calc(18px + env(safe-area-inset-top)) 48px 18px;
   border-bottom: 1px solid var(--line-soft);
+  /* 老 Safari（iOS 16.2 之前）不认识 color-mix，退回不透明底色，别让文字压在内容上 */
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 .topbar__brand {
@@ -412,7 +415,9 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   right: 0;
   bottom: 0;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line-soft);
 }
@@ -1019,6 +1024,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   justify-content: center;
   padding: 24px;
   background: rgba(20, 19, 15, .55);
+  -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
   animation: fadeIn .22s var(--ease) both;
 }
@@ -2230,7 +2236,7 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.3.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.3.1 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -2524,7 +2530,7 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.3.0';
+  var APP_VERSION = '0.3.1';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];

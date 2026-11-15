@@ -6,7 +6,7 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.3.0';
+  var APP_VERSION = '0.3.1';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'more'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];

@@ -244,7 +244,10 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   gap: 16px;
   padding: calc(18px + env(safe-area-inset-top)) 48px 18px;
   border-bottom: 1px solid var(--line-soft);
+  /* 老 Safari（iOS 16.2 之前）不认识 color-mix，退回不透明底色，别让文字压在内容上 */
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 .topbar__brand {
@@ -383,7 +386,9 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   right: 0;
   bottom: 0;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg);
   background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line-soft);
 }
@@ -990,6 +995,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   justify-content: center;
   padding: 24px;
   background: rgba(20, 19, 15, .55);
+  -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
   animation: fadeIn .22s var(--ease) both;
 }

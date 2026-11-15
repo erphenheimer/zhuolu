@@ -2038,6 +2038,12 @@ def parse_args(argv=None):
     )
     parser.add_argument("--headed", action="store_true", help="显示浏览器窗口")
     parser.add_argument(
+        "--browser",
+        choices=["chromium", "webkit"],
+        default="chromium",
+        help="测试引擎：chromium（默认，系统 Chrome）或 webkit（Safari 内核）",
+    )
+    parser.add_argument(
         "--out",
         default=str(DEFAULT_QA_ROOT),
         help="测试产物目录（默认 D:\\document\\zhuolu-qa）",
@@ -2067,7 +2073,7 @@ GROUPS = [
 
 def main(argv=None):
     args = parse_args(argv)
-    if not os.path.exists(CHROME_PATH):
+    if args.browser == "chromium" and not os.path.exists(CHROME_PATH):
         print("找不到 Chrome: %s（可用环境变量 ZHUOLU_CHROME 覆盖）" % CHROME_PATH)
         return 2
 
@@ -2096,10 +2102,14 @@ def main(argv=None):
     exit_code = 0
     try:
         with sync_playwright() as playwright:
-            run.browser = playwright.chromium.launch(
-                executable_path=CHROME_PATH,
-                headless=not args.headed,
-            )
+            if args.browser == "webkit":
+                # WebKit 是 Safari 的内核，用来在没有 iOS 真机时先挡住引擎级差异
+                run.browser = playwright.webkit.launch(headless=not args.headed)
+            else:
+                run.browser = playwright.chromium.launch(
+                    executable_path=CHROME_PATH,
+                    headless=not args.headed,
+                )
             try:
                 run.chrome_version = run.browser.version
             except Exception:
