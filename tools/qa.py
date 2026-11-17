@@ -923,7 +923,7 @@ def _cert_list(page):
 
 
 def _cert_delete(page):
-    page.click("#cert-list [data-action='del-cert']")
+    page.click("#cert-list [data-action='del-record']")
     page.wait_for_function(
         "() => document.querySelectorAll('#cert-list li.item').length === 0"
     )
@@ -2362,6 +2362,321 @@ def _safety_overflow(page):
     return detail
 
 
+# ---------------------------------------------------------------- M 记录编辑与主题小结（0.5.0）
+
+MARK = "QA-主题-标记"
+OLD_MARK = "QA-旧记录-标记"
+
+
+def _seed_records(page):
+    stamp = now_ms()
+    state = {
+        "v": 1,
+        "firstSeen": stamp - 86400000,
+        "sos": [
+            {"id": "qa-sos", "t": stamp - 5000, "before": 8, "after": 4, "need": ["被抱一下"]}
+        ],
+        "rum": [
+            {
+                "id": "qa-rum",
+                "t": stamp - 1000,
+                "thought": "QA-反刍-他说最近很忙 " + MARK,
+                "kind": "others",
+                "action": "QA-下一步",
+            },
+            {
+                "id": "qa-rum-old",
+                "t": stamp - 20 * 86400000,
+                "thought": "QA-反刍-二十天前 " + OLD_MARK + " " + MARK,
+                "kind": "why",
+                "action": "",
+            },
+        ],
+        "cert": [
+            {
+                "id": "qa-cert",
+                "t": stamp - 2000,
+                "fact": "QA-事实 " + MARK,
+                "interp": "QA-解释",
+                "unknown": "",
+                "next": "",
+            }
+        ],
+        "tr": [
+            {
+                "id": "qa-tr",
+                "t": stamp - 3000,
+                "situation": "QA-情境",
+                "thought": "QA-思维 " + MARK,
+                "belief": 70,
+                "emotion": "慌",
+                "intensity": 60,
+                "for": "",
+                "against": "",
+                "balanced": "QA-平衡",
+                "after": 40,
+            }
+        ],
+        "sleep": [
+            {
+                "id": "qa-sleep",
+                "t": stamp - 4000,
+                "fact": "QA-睡前 " + MARK,
+                "did": "",
+                "tomorrow": "",
+            }
+        ],
+        "parked": [],
+        "daily": {},
+        "window": {"time": "19:30", "minutes": 15, "openedAt": 0, "closedDay": ""},
+        "settings": {"theme": "light", "motion": "auto", "support": ["", ""], "lastExportAt": 0},
+    }
+    page.evaluate("s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", state)
+    page.reload(wait_until="domcontentloaded")
+    visible(page, ".view[data-view='more'].is-active")
+    total = page.eval_on_selector_all(
+        ".tab-panel [data-action='edit-record']", "els => els.length"
+    )
+    assert total == 6, "标签页里应有 6 个「改」按钮（反刍 2 + 确定性/思维/睡前/着陆），实际 %d" % total
+    dels = page.eval_on_selector_all(".tab-panel [data-action='del-record']", "els => els.length")
+    assert dels == 6, "删除按钮应有 6 个，实际 %d" % dels
+    cert_page = page.eval_on_selector_all("#cert-list [data-action='edit-record']", "els => els.length")
+    assert cert_page == 1, "确定性页的历史列表也应能改，实际 %d 个入口" % cert_page
+    return "5 类共 6 条记录，改 / 删各 6 个；确定性页 1 个入口"
+
+
+def _edit_rum(page):
+    page.click("[data-rec-tab='rum']")
+    page.locator("[data-rec-panel='rum'] [data-action='edit-record']").first.click()
+    visible(page, "#edit-overlay")
+    assert MARK in page.input_value("#ef-thought"), "编辑器没带上原内容"
+    assert page.eval_on_selector("#ef-kind", "e => e.value") == "others", "分类下拉没选中原值"
+    page.fill("#ef-thought", "QA-反刍-改过了 " + MARK)
+    page.click("#edit-overlay [data-action='save-edit']")
+    hidden(page, "#edit-overlay")
+    wait_text(page, "#rec-rum", "QA-反刍-改过了")
+    state = app_state(page)
+    rum = state["rum"]
+    assert len(rum) == 2, "编辑后不应新增记录，实际 %d 条" % len(rum)
+    item = [r for r in rum if r["id"] == "qa-rum"][0]
+    assert item["thought"].startswith("QA-反刍-改过了"), "落盘内容不对: %s" % item["thought"]
+    assert item["action"] == "QA-下一步", "没改的字段被清掉了"
+    assert item.get("editedAt"), "应记下 editedAt"
+    return "改 1 条、总数不变、其余字段保留"
+
+
+def _edit_required(page):
+    page.click("[data-rec-tab='tr']")
+    page.locator("[data-rec-panel='tr'] [data-action='edit-record']").first.click()
+    visible(page, "#edit-overlay")
+    kicker = page.inner_text("#edit-kicker")
+    page.fill("#ef-thought", "   ")
+    typed = page.evaluate("() => document.getElementById('ef-thought').value")
+    page.click("#edit-overlay [data-action='save-edit']")
+    try:
+        visible(page, "#edit-err", timeout=6000)
+    except Exception:
+        info = page.evaluate(
+            "() => ({ open: !document.getElementById('edit-overlay').hasAttribute('hidden'),"
+            " errHidden: document.getElementById('edit-err').hasAttribute('hidden'),"
+            " rum: (JSON.parse(localStorage.getItem('zhuolu.v1')).rum||[]).map(r => r.thought),"
+            " tr: (JSON.parse(localStorage.getItem('zhuolu.v1')).tr||[]).map(r => r.thought) })"
+        )
+        raise AssertionError(
+            "保存后没出现校验提示｜kicker=%s｜typed=%r｜%s" % (kicker, typed, info)
+        )
+    assert page.locator("#edit-overlay").is_visible(), "校验失败时浮层不应关闭"
+    state = app_state(page)
+    tr = [r for r in state["tr"] if r["id"] == "qa-tr"][0]
+    assert tr["thought"].startswith("QA-思维"), "校验失败仍然写盘了: %s" % tr["thought"]
+    page.keyboard.press("Escape")
+    hidden(page, "#edit-overlay")
+    return "空自动思维被拦住，Esc 关闭"
+
+
+def _edit_number(page):
+    page.click("[data-rec-tab='sos']")
+    page.locator("[data-rec-panel='sos'] [data-action='edit-record']").first.click()
+    visible(page, "#edit-overlay")
+    page.fill("#ef-before", "99")
+    page.fill("#ef-after", "2")
+    page.click("#edit-overlay [data-action='save-edit']")
+    hidden(page, "#edit-overlay")
+    state = app_state(page)
+    sos = state["sos"][0]
+    assert sos["before"] == 10, "超范围应夹到 10，实际 %s" % sos["before"]
+    assert sos["after"] == 2, "改后的分数没写进去"
+    assert sos["need"] == ["被抱一下"], "need 被清掉了: %s" % sos["need"]
+    wait_text(page, "#rec-sos", "10 → 2")
+    return "99 夹到 10，need 未受影响"
+
+
+def _edit_reload(page):
+    page.reload(wait_until="domcontentloaded")
+    visible(page, ".view[data-view='more'].is-active")
+    wait_text(page, "#rec-rum", "QA-反刍-改过了")
+    state = app_state(page)
+    assert len(state["rum"]) == 2, "刷新后条数变了"
+    return "刷新后修改仍在"
+
+
+def _filter_initial(page):
+    nav(page, "review")
+    assert page.inner_text("#filter-count").strip() == "—", "初始计数应为 —"
+    assert page.locator("#filter-hits .item").count() == 0, "没输关键词不应有结果"
+    assert "还没有输入关键词" in page.inner_text("#filter-note")
+    return "初始空态与提示"
+
+
+def _filter_hits(page):
+    page.fill("#review-q", MARK)
+    wait_text(page, "#filter-count", "4 条")
+    metas = page.eval_on_selector_all(
+        "#filter-hits .item__meta", "els => els.map(e => e.textContent.trim())"
+    )
+    assert len(metas) == 4, "近 7 天应有 4 条，实际 %d" % len(metas)
+    assert metas[0].startswith("反刍"), "应按时间倒序，第一条是 %s" % metas[0]
+    marks = page.eval_on_selector_all("#filter-hits mark", "els => els.length")
+    assert marks >= 4, "命中词应高亮，实际 %d 处" % marks
+    note = page.inner_text("#filter-note")
+    assert "近 7 天" in note and "4 条" in note, "提示文案不对: %s" % note
+    return "4 条 · 高亮 %d 处 · 倒序" % marks
+
+
+def _filter_kind(page):
+    page.click("[data-rv-kind='tr']")
+    wait_text(page, "#filter-count", "1 条")
+    metas = page.eval_on_selector_all(
+        "#filter-hits .item__meta", "els => els.map(e => e.textContent.trim())"
+    )
+    assert len(metas) == 1 and metas[0].startswith("思维记录"), "分类筛选不对: %s" % metas
+    page.click("[data-rv-kind='all']")
+    wait_text(page, "#filter-count", "4 条")
+    return "只看思维记录 → 1 条，切回全部 → 4 条"
+
+
+def _filter_none(page):
+    page.fill("#review-q", "QA-根本不存在的词")
+    page.wait_for_function(
+        "() => document.querySelector('#filter-count').textContent.trim() === '0 条'"
+    )
+    assert "没有" in page.inner_text("#filter-note"), "没命中时提示不对"
+    assert page.locator("#filter-hits .item").count() == 0
+    page.fill("#review-q", MARK)
+    wait_text(page, "#filter-count", "4 条")
+    return "0 条时给提示，不报错"
+
+
+def _filter_range(page):
+    page.click("[data-review-range='30']")
+    wait_text(page, "#filter-count", "5 条")
+    note = page.inner_text("#filter-note")
+    assert "近 30 天" in note, "范围切换后提示没更新: %s" % note
+    page.click("[data-review-range='7']")
+    wait_text(page, "#filter-count", "4 条")
+    return "30 天含更早那条（5 条），切回 7 天 4 条"
+
+
+def _summary_export(page):
+    page.click("[data-review-range='30']")
+    wait_text(page, "#filter-count", "5 条")
+    name, text = download_with(page, "export-summary")
+    assert name.startswith("zhuolu-summary-") and name.endswith(".md"), "文件名不对: %s" % name
+    assert "# 着陆台 · 阶段性小结" in text, "缺少标题"
+    assert MARK in text and OLD_MARK in text, "摘录里缺内容"
+    assert "近 30 天" in text, "缺少时间范围"
+    assert "符合的记录：5 条" in text, "条数不对"
+    assert text.count("- **") == 5, "摘录条数应为 5，实际 %d" % text.count("- **")
+    assert "没有上传任何数据" in text, "缺少隐私说明"
+    page.click("[data-review-range='7']")
+    wait_text(page, "#filter-count", "4 条")
+    return "%s · %d 字符 · 5 条摘录" % (name, len(text))
+
+
+def _filter_mobile(page):
+    page.set_viewport_size({"width": 375, "height": 780})
+    nav(page, "review")
+    size = page.eval_on_selector("#review-q", "e => parseFloat(getComputedStyle(e).fontSize)")
+    assert size >= 16, "iOS 聚焦会缩放：关键词输入框 %.1fpx < 16px" % size
+    page.set_viewport_size({"width": 320, "height": 720})
+    detail = assert_no_overflow(page, "320px #/review（含筛选卡）")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    nav(page, "review")
+    return "输入框 %.0fpx，320px 无横向溢出（%s）" % (size, detail)
+
+
+def _safety_quick(page):
+    nav(page, "safety")
+    page.click(".safety-quick [data-action='open-sos']")
+    visible(page, "#sos-overlay")
+    on = page.eval_on_selector("[data-sos-step='1']", "e => e.classList.contains('is-on')")
+    assert on, "应从第 1 步开始"
+    assert page.locator("#sos-sp-link").is_hidden(), "计划为空时不应出现入口"
+    page.click("#sos-overlay [data-action='close-sos']")
+    hidden(page, "#sos-overlay")
+    return "安全页一键进着陆；计划为空时入口隐藏"
+
+
+def _sp_link_flow(page):
+    nav(page, "safety")
+    page.fill("#sp-input-people", "QA-联系人 13800138000")
+    page.press("#sp-input-people", "Enter")
+    wait_text(page, "[data-sp-list='people']", "QA-联系人")
+    page.click(".safety-quick [data-action='open-sos']")
+    visible(page, "#sos-overlay")
+    assert page.locator("#sos-sp-link").is_visible(), "写了计划后着陆浮层里应出现入口"
+    page.click("#sos-sp-link [data-action='sp-view']")
+    visible(page, "#sp-overlay")
+    text = page.inner_text("#sp-view")
+    assert "QA-联系人" in text, "速览没带出计划内容"
+    assert "12356" in text, "速览应始终带热线"
+    assert page.locator("#sp-view a[href='tel:13800138000']").count() == 1, (
+        "速览里的号码应是拨号链接"
+    )
+    page.click("#sp-overlay [data-action='close-sp-view']")
+    hidden(page, "#sp-overlay")
+    assert page.locator("#sos-overlay").is_visible(), "关掉速览应回到着陆浮层"
+    return "速览带内容 / 热线 / tel:，关闭回到着陆"
+
+
+def _sp_from_step5(page):
+    page.click("[data-sos-step='1'] [data-action='sos-start']")
+    page.click("[data-sos-step='2'] [data-action='sos-skip-breath']")
+    page.click("[data-sos-step='3'] [data-action='sos-next']")
+    page.click("[data-sos-step='4'] [data-action='sos-finish']")
+    visible(page, "[data-sos-step='5'].is-on")
+    assert page.locator("#sos-sp-btn5").is_visible(), "第 5 步应给出安全计划入口"
+    page.click("#sos-sp-btn5")
+    visible(page, "#sp-overlay")
+    page.click("#sp-overlay [data-action='sp-edit']")
+    hidden(page, "#sp-overlay")
+    hidden(page, "#sos-overlay")
+    visible(page, ".view[data-view='safety'].is-active")
+    return "第 5 步 → 速览 → 去修改，浮层全部关闭"
+
+
+def group_records(run):
+    desktop = {"viewport": {"width": 1280, "height": 900}}
+    session = Session(run, **desktop)
+    page = session.open("more")
+    run.check("记录与小结", "种子记录与「改」入口", lambda: _seed_records(page), page)
+    run.check("记录与小结", "编辑：改一条不新增、字段保留", lambda: _edit_rum(page), page)
+    run.check("记录与小结", "编辑：必填为空时拦住", lambda: _edit_required(page), page)
+    run.check("记录与小结", "编辑：数字超范围夹紧", lambda: _edit_number(page), page)
+    run.check("记录与小结", "编辑：刷新后修改仍在", lambda: _edit_reload(page), page)
+    run.check("记录与小结", "筛选：初始空态", lambda: _filter_initial(page), page)
+    run.check("记录与小结", "筛选：命中、高亮、倒序", lambda: _filter_hits(page), page)
+    run.check("记录与小结", "筛选：只看一类", lambda: _filter_kind(page), page)
+    run.check("记录与小结", "筛选：没有命中时", lambda: _filter_none(page), page)
+    run.check("记录与小结", "筛选：范围切换影响结果", lambda: _filter_range(page), page)
+    run.check("记录与小结", "小结：导出 Markdown 条数一致", lambda: _summary_export(page), page)
+    run.check("记录与小结", "筛选：手机字号与 320px 布局", lambda: _filter_mobile(page), page)
+    run.check("记录与小结", "安全计划：安全页一键进着陆", lambda: _safety_quick(page), page)
+    run.check("记录与小结", "安全计划：着陆浮层里看速览", lambda: _sp_link_flow(page), page)
+    run.check("记录与小结", "安全计划：速览跳去修改", lambda: _sp_from_step5(page), page)
+    session.close()
+
+
 # ---------------------------------------------------------------- K 全局汇总
 
 
@@ -2423,6 +2738,11 @@ def parse_args(argv=None):
         default=None,
         help="测试指定的构建目录（默认仓库根；用于回归某个已构建产物）",
     )
+    parser.add_argument(
+        "--group",
+        default=None,
+        help="只跑名字包含该子串的测试组（便于迭代，例如 --group 记录）",
+    )
     return parser.parse_args(argv)
 
 
@@ -2438,6 +2758,7 @@ GROUPS = [
     ("iPhone UA", group_ios),
     ("PWA / 离线", group_pwa),
     ("隐私与安全", group_privacy),
+    ("记录与小结", group_records),
     ("全局汇总", group_global),
 ]
 
@@ -2485,7 +2806,14 @@ def main(argv=None):
                 run.chrome_version = run.browser.version
             except Exception:
                 pass
-            for group_name, group_func in GROUPS:
+            selected = [
+                (name, func)
+                for name, func in GROUPS
+                if not args.group or args.group in name
+            ]
+            if not selected:
+                print("没有匹配 --group %r 的测试组" % args.group)
+            for group_name, group_func in selected:
                 run.run_group(group_name, group_func)
             try:
                 run.browser.close()

@@ -334,6 +334,28 @@
         <ul class="review-notes" id="review-notes"></ul>
       </div>
 
+      <div class="card" id="filter-card">
+        <div class="card-head"><h2 class="h3">按主题找记录</h2><span class="badge" id="filter-count">—</span></div>
+        <p class="small muted mb-16">写一个词，把这段时间里提到它的记录挑出来。想在见咨询师前整理一份带原话的小结，用这个。</p>
+        <div class="field">
+          <label for="review-q">关键词</label>
+          <input type="search" id="review-q" placeholder="例：他、工作、睡不着、对不起" maxlength="40" autocomplete="off">
+        </div>
+        <div class="chips" id="review-kinds" aria-label="只看某一类">
+          <button class="chip is-on" data-action="rv-kind" data-rv-kind="all" aria-pressed="true">全部</button>
+          <button class="chip" data-action="rv-kind" data-rv-kind="rum" aria-pressed="false">反刍</button>
+          <button class="chip" data-action="rv-kind" data-rv-kind="tr" aria-pressed="false">思维记录</button>
+          <button class="chip" data-action="rv-kind" data-rv-kind="cert" aria-pressed="false">确定性</button>
+          <button class="chip" data-action="rv-kind" data-rv-kind="sleep" aria-pressed="false">睡前</button>
+          <button class="chip" data-action="rv-kind" data-rv-kind="sos" aria-pressed="false">着陆</button>
+        </div>
+        <p class="small muted mt-16" id="filter-note">还没输入关键词。</p>
+        <ul class="list hit-list" id="filter-hits"></ul>
+        <div class="actions-row mb-0">
+          <button class="btn btn--ghost btn--sm" data-action="export-summary">导出这份小结</button>
+        </div>
+      </div>
+
       <div class="review-footnote">
         <p class="small muted">回顾不是评分。空白的日子也算数——恢复不是直线。</p>
         <button class="btn btn--ghost btn--sm" data-action="export-review">导出这段回顾</button>
@@ -351,6 +373,11 @@
       <div class="alert alert--warm" role="note">
         <b>如果现在就有危险</b>
         <span>打 <a href="tel:12356">12356</a>（全国心理援助热线），或 <a href="tel:120">120</a> / <a href="tel:110">110</a>。别等自己想清楚再打。</span>
+      </div>
+
+      <div class="safety-quick">
+        <span class="safety-quick__t">不是危险，但现在已经很难受？先着陆，这份计划晚点再写。</span>
+        <button class="btn btn--primary btn--sm" data-action="open-sos">开始 60 秒着陆</button>
       </div>
 
       <div id="safety-steps"></div>
@@ -544,7 +571,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.4.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.5.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -602,6 +629,9 @@
         <div class="step-actions">
           <button class="btn btn--primary" data-action="sos-start">开始 60 秒</button>
           <button class="btn btn--ghost" data-action="sos-skip-breath">跳过，直接接地</button>
+        </div>
+        <div class="sos-plan-link" id="sos-sp-link" hidden>
+          <button class="link-btn" data-action="sp-view">我写过安全计划，看一眼</button>
         </div>
       </section>
 
@@ -696,7 +726,9 @@
         <div class="step-actions">
           <button class="btn btn--primary" data-action="close-sos">回到工作台</button>
           <button class="btn btn--ghost" data-action="sos-restart">再来一轮</button>
+          <button class="btn btn--ghost" data-action="sp-view" id="sos-sp-btn5" hidden>看我的安全计划</button>
         </div>
+        <p class="small muted mt-16" id="sos-sp-hint5" hidden>难受还没退的话，安全计划里的「可以打电话的人」比一个人扛着强。</p>
       </section>
 
     </div>
@@ -760,6 +792,49 @@
         </div>
       </section>
 
+    </div>
+  </div>
+</div>
+
+<!-- ============ 记录编辑浮层 ============ -->
+<div class="overlay" id="edit-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker" id="edit-kicker">改一条记录</span>
+      </div>
+      <button class="panel__close" data-action="close-edit" aria-label="关闭编辑">×</button>
+    </div>
+    <div class="panel__body">
+      <h2 class="h2" id="edit-title">改这条记录</h2>
+      <p class="small muted">只改这一条，时间不动。存下之后，原来那条会被替换。</p>
+      <p class="pass-err edit-err" id="edit-err" role="alert" hidden></p>
+      <div id="edit-fields"></div>
+      <div class="step-actions">
+        <button class="btn btn--primary" data-action="save-edit">存下修改</button>
+        <button class="btn btn--ghost" data-action="close-edit">不改了</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 安全计划速览浮层 ============ -->
+<div class="overlay" id="sp-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="sp-view-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div>
+        <span class="panel__kicker">安全计划 · 只看不改</span>
+      </div>
+      <button class="panel__close" data-action="close-sp-view" aria-label="关闭安全计划">×</button>
+    </div>
+    <div class="panel__body">
+      <h2 class="h2" id="sp-view-title">你之前写下的。</h2>
+      <p class="small muted">照着做就行，不用现在重新想。</p>
+      <div class="sp-view" id="sp-view"></div>
+      <div class="step-actions">
+        <button class="btn btn--primary" data-action="close-sp-view">知道了</button>
+        <button class="btn btn--ghost" data-action="sp-edit">去修改</button>
+      </div>
     </div>
   </div>
 </div>

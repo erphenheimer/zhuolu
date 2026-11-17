@@ -6,7 +6,7 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.4.0';
+  var APP_VERSION = '0.5.0';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
   var KDF_ITER = 210000;
@@ -724,6 +724,7 @@
     var badge = $('#safety-entry-badge');
     if (badge) badge.textContent = total ? '已写 ' + total + ' 条' : '未写';
     renderSafetyPrint(d);
+    syncSOSPlanLink();
   }
 
   function renderSafetyPrint(d) {
@@ -774,6 +775,44 @@
     setTimeout(function () { document.body.removeAttribute('data-print'); }, 1200);
   }
 
+  /* ---------------- 安全计划速览（浮层） ---------------- */
+
+  function renderSpView() {
+    var host = $('#sp-view');
+    if (!host) return;
+    var d = spData();
+    var parts = ['<div class="sp-view__crisis"><b>如果现在就有危险</b>打 <a href="tel:12356">12356</a>，' +
+      '或 <a href="tel:120">120</a> / <a href="tel:110">110</a>。这一步比看计划更要紧。</div>'];
+    SP_SECTIONS.forEach(function (s) {
+      var list = d[s.key];
+      if (!list.length) return;
+      parts.push('<section class="sp-view__block"><h3><span class="sp-k">' + s.n + '</span>' + esc(s.title) + '</h3><ul>' +
+        list.map(function (t) { return '<li>' + spTextHtml(t) + '</li>'; }).join('') + '</ul></section>');
+    });
+    if (parts.length === 1) {
+      parts.push('<p class="small muted">这份计划还是空的。等稳一点，去「06 安全计划」写两节就够：' +
+        '可以打电话的人、让身边的东西不那么危险。</p>');
+    }
+    host.innerHTML = parts.join('');
+  }
+
+  function openSpView() {
+    renderSpView();
+    openOverlay('#sp-overlay', '.panel__close');
+  }
+
+  function closeSpView() {
+    closeOverlay('#sp-overlay');
+  }
+
+  function syncSOSPlanLink() {
+    var has = spCount() > 0;
+    ['#sos-sp-link', '#sos-sp-btn5', '#sos-sp-hint5'].forEach(function (sel) {
+      var el = $(sel);
+      if (el) el.hidden = !has;
+    });
+  }
+
   /* ---------------- 路由 ---------------- */
 
   function currentRoute() {
@@ -781,7 +820,10 @@
     return ROUTES.indexOf(h) >= 0 ? h : 'now';
   }
 
+  var routedHash = '';
+
   function renderRoute() {
+    routedHash = String(location.hash || '');
     var route = currentRoute();
     $$('.view').forEach(function (v) {
       v.classList.toggle('is-active', v.getAttribute('data-view') === route);
@@ -794,16 +836,25 @@
 
   function go(route) {
     if (ROUTES.indexOf(route) < 0) route = 'now';
-    if (currentRoute() === route) {
-      renderRoute();
-      return;
+    if (currentRoute() !== route) {
+      try { location.hash = '#/' + route; } catch (e) { /* ignore */ }
     }
-    location.hash = '#/' + route;
-  }
-
-  window.addEventListener('hashchange', function () {
     window.scrollTo(0, 0);
     renderRoute();
+  }
+
+  // 站内跳转已经由 go() 立刻渲染，hashchange 只负责后退 / 前进 / 手改地址。
+  // WebKit 偶尔把 hashchange 派发在地址更新之前，所以延后一拍再核对一次地址，
+  // 避免"点了导航、地址变了、界面没动"。
+  window.addEventListener('hashchange', function () {
+    var want = String(location.hash || '');
+    if (want === routedHash) return;
+    setTimeout(function () {
+      if (String(location.hash || '') !== want) return;
+      if (want === routedHash) return;
+      window.scrollTo(0, 0);
+      renderRoute();
+    }, 0);
   });
 
   /* ---------------- 现在页 ---------------- */
@@ -1363,7 +1414,8 @@
   }
 
   function openSOS() {
-    if (!$('#intercept-overlay').hidden) closeOverlay('#intercept-overlay');
+    if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) closeOverlay('#intercept-overlay');
+    syncSOSPlanLink();
     resetSOS();
     openOverlay('#sos-overlay');
     showSOSStep(1);
@@ -1587,7 +1639,7 @@
       return '<li class="item"><div class="item__main">' +
         '<div class="item__meta">' + fmtDayTime(c.t) + '</div>' +
         '<div class="cert-lines">' + certSummaryHtml(c) + '</div>' +
-        '</div><button class="icon-btn" data-action="del-cert" data-id="' + esc(c.id) + '" aria-label="删除这份整理">×</button></li>';
+        '</div>' + recordActsHtml('cert', c.id, '确定性') + '</li>';
     }).join('');
   }
 
@@ -2021,6 +2073,8 @@
 
     var homeLink = $('#home-review-link');
     if (homeLink) homeLink.hidden = recordCount() === 0;
+
+    renderFilter();
   }
 
   function exportReview() {
@@ -2043,12 +2097,179 @@
     saveFile('zhuolu-review-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8', '已导出这段回顾。');
   }
 
+  /* ---------------- 按主题找记录 ---------------- */
+
+  var HIT_META = {
+    rum: { label: '反刍', fields: ['thought', 'action'] },
+    tr: { label: '思维记录', fields: ['situation', 'thought', 'emotion', 'for', 'against', 'balanced'] },
+    cert: { label: '确定性', fields: ['fact', 'interp', 'unknown', 'next'] },
+    sleep: { label: '睡前', fields: ['fact', 'did', 'tomorrow'] },
+    sos: { label: '着陆', fields: ['before', 'after', 'need'] }
+  };
+  var HIT_ORDER = ['rum', 'tr', 'cert', 'sleep', 'sos'];
+
+  var rvFilter = { q: '', kind: 'all' };
+  var rvTimer = null;
+
+  function recordText(r, fields) {
+    return fields.map(function (f) {
+      var v = r[f];
+      if (Array.isArray(v)) return v.join('、');
+      return v == null ? '' : String(v);
+    }).filter(function (s) { return s !== ''; }).join(' · ');
+  }
+
+  function collectHits(days) {
+    if (!state) return [];
+    var since = startOfDay() - (Math.max(1, days) - 1) * 86400000;
+    var q = rvFilter.q.trim().toLowerCase();
+    var kinds = rvFilter.kind === 'all' ? HIT_ORDER : [rvFilter.kind];
+    var out = [];
+    kinds.forEach(function (k) {
+      if (!HIT_META[k]) return;
+      (state[k] || []).forEach(function (r) {
+        if (!r || !r.t || r.t < since) return;
+        var text = recordText(r, HIT_META[k].fields);
+        if (q && text.toLowerCase().indexOf(q) < 0) return;
+        out.push({ kind: k, t: r.t, text: text });
+      });
+    });
+    out.sort(function (a, b) { return b.t - a.t; });
+    return out;
+  }
+
+  function hitCountText(hits) {
+    var by = {};
+    hits.forEach(function (h) { by[h.kind] = (by[h.kind] || 0) + 1; });
+    return HIT_ORDER.filter(function (k) { return by[k]; }).map(function (k) {
+      return HIT_META[k].label + ' ' + by[k];
+    }).join(' · ');
+  }
+
+  function snippetOf(text, q, width) {
+    width = width || 70;
+    var s = String(text).replace(/\s+/g, ' ');
+    if (!q) return s.length > width ? s.slice(0, width) + '…' : s;
+    var at = s.toLowerCase().indexOf(q.toLowerCase());
+    if (at < 0) return s.length > width ? s.slice(0, width) + '…' : s;
+    var start = Math.max(0, at - 26);
+    var end = Math.min(s.length, start + width);
+    return (start > 0 ? '…' : '') + s.slice(start, end) + (end < s.length ? '…' : '');
+  }
+
+  function hlText(text, q) {
+    var s = String(text);
+    if (!q) return esc(s);
+    var low = s.toLowerCase();
+    var needle = q.toLowerCase();
+    var out = '', i = 0, at;
+    while ((at = low.indexOf(needle, i)) >= 0) {
+      out += esc(s.slice(i, at)) + '<mark>' + esc(s.slice(at, at + needle.length)) + '</mark>';
+      i = at + needle.length;
+    }
+    return out + esc(s.slice(i));
+  }
+
+  function renderFilter() {
+    if (!state) return;
+    var input = $('#review-q');
+    if (input && document.activeElement !== input && input.value !== rvFilter.q) input.value = rvFilter.q;
+    $$('[data-rv-kind]').forEach(function (b) {
+      var on = b.getAttribute('data-rv-kind') === rvFilter.kind;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    var q = rvFilter.q.trim();
+    var scope = '近 ' + reviewDays + ' 天';
+    var count = $('#filter-count');
+    var note = $('#filter-note');
+    var host = $('#filter-hits');
+    if (!q && rvFilter.kind === 'all') {
+      if (count) count.textContent = '—';
+      if (note) note.textContent = '还没有输入关键词。写一个最近反复出现的词就行：那个人、那件事、那句总在的话。';
+      if (host) host.innerHTML = '';
+      return;
+    }
+    var hits = collectHits(reviewDays);
+    if (count) count.textContent = hits.length + ' 条';
+    var cond = (q ? '含「' + q + '」的' : '') + (rvFilter.kind === 'all' ? '记录' : HIT_META[rvFilter.kind].label + '记录');
+    if (note) {
+      note.textContent = hits.length
+        ? scope + '里' + cond + '有 ' + hits.length + ' 条' + (hitCountText(hits) ? '：' + hitCountText(hits) : '') + '。'
+        : scope + '里没有' + cond + '。换个词，或者把范围切到近 30 天。';
+    }
+    if (!host) return;
+    if (!hits.length) { host.innerHTML = ''; return; }
+    var shown = hits.slice(0, 20);
+    host.innerHTML = shown.map(function (h) {
+      return '<li class="item"><div class="item__main">' +
+        '<div class="item__text">' + hlText(snippetOf(h.text, q), q) + '</div>' +
+        '<div class="item__meta">' + HIT_META[h.kind].label + ' · ' + fmtDayTime(h.t) + '</div>' +
+        '</div></li>';
+    }).join('') + (hits.length > shown.length
+      ? '<li class="empty">只显示最近 20 条；导出的那份是全的。</li>' : '');
+  }
+
+  function exportSummary() {
+    if (!state) return;
+    var q = rvFilter.q.trim();
+    if (!q && rvFilter.kind === 'all') {
+      showToast('先写一个关键词，再导出。');
+      var i = $('#review-q');
+      if (i) { try { i.focus(); } catch (e) { /* ignore */ } }
+      return;
+    }
+    var hits = collectHits(reviewDays);
+    if (!hits.length) { showToast('这段时间里没有符合条件的记录。'); return; }
+    var data = buildReviewData(reviewDays);
+    var first = data.list[0].d, last = data.list[data.list.length - 1].d;
+    var lines = [];
+    lines.push('# 着陆台 · 阶段性小结');
+    lines.push('');
+    lines.push('- 时间范围：近 ' + reviewDays + ' 天（' + fmtShortDate(first.getTime()) + ' – ' + fmtShortDate(last.getTime()) + '）');
+    lines.push('- 导出时间：' + fmtDateFull(new Date()) + ' ' + fmtClock(Date.now()));
+    lines.push('- 筛选：' + (q ? '关键词「' + q + '」' : '没有关键词') + ' · ' + (rvFilter.kind === 'all' ? '全部类型' : HIT_META[rvFilter.kind].label));
+    lines.push('- 符合的记录：' + hits.length + ' 条' + (hitCountText(hits) ? '（' + hitCountText(hits) + '）' : ''));
+    lines.push('');
+    lines.push('## 这段时间的数字');
+    lines.push('');
+    lines.push('- 着陆 ' + data.sosCount + ' 次' + (data.sosCount ? '，平均 ' + data.beforeAvg.toFixed(1) + ' → ' + data.afterAvg.toFixed(1) : ''));
+    lines.push('- 反刍登记 ' + data.rumCount + ' 次');
+    lines.push('- 打卡完成率 ' + (data.checkTotal ? Math.round(data.checkDone / data.checkTotal * 100) : 0) + '%（' + data.checkDone + ' / ' + data.checkTotal + '）');
+    lines.push('');
+    lines.push('## 摘录（按时间倒序）');
+    lines.push('');
+    hits.forEach(function (h) {
+      var d = new Date(h.t);
+      lines.push('- **' + HIT_META[h.kind].label + '** ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + fmtClock(h.t) +
+        ' — ' + h.text.replace(/\s+/g, ' '));
+    });
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    lines.push('这份小结在浏览器里生成，没有上传任何数据。');
+    lines.push('记录是自助练习的副产品，不是诊断材料；判断交给专业人士。');
+    saveFile('zhuolu-summary-' + dayKey() + '.md', lines.join('\n'), 'text/markdown;charset=utf-8', '已导出这份小结。');
+  }
+
+  function setFilterKind(kind) {
+    rvFilter.kind = HIT_META[kind] ? kind : 'all';
+    renderFilter();
+  }
+
   /* ---------------- 记录 ---------------- */
 
   function emptyItem(text) { return '<li class="empty">' + text + '</li>'; }
 
-  function delBtnHtml(kind, id, label) {
-    return '<button class="icon-btn" data-action="del-record" data-kind="' + kind + '" data-id="' + esc(id) + '" aria-label="删除这条' + label + '记录">×</button>';
+  function recordActsHtml(kind, id, label) {
+    var canEdit = !!EDIT_SPEC[kind];
+    return '<div class="item__acts">' +
+      (canEdit
+        ? '<button class="icon-btn icon-btn--edit" data-action="edit-record" data-kind="' + kind +
+          '" data-id="' + esc(id) + '" aria-label="编辑这条' + label + '记录">改</button>'
+        : '') +
+      '<button class="icon-btn" data-action="del-record" data-kind="' + kind + '" data-id="' + esc(id) +
+        '" aria-label="删除这条' + label + '记录">×</button></div>';
   }
 
   var undoDelete = null;
@@ -2092,7 +2313,7 @@
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写内容）') + '</div>' +
           (r.action ? '<div class="small muted">下一步：' + esc(r.action) + '</div>' : '') +
           '<div class="item__meta">' + KIND_LABEL[r.kind] + ' · ' + fmtDayTime(r.t) + '</div></div>' +
-          delBtnHtml('rum', r.id, '反刍') + '</li>';
+          recordActsHtml('rum', r.id, '反刍') + '</li>';
       }).join('') : emptyItem('还没有反刍记录。');
     }
 
@@ -2100,7 +2321,7 @@
     if (certEl) certEl.innerHTML = cert.length ? cert.map(function (c) {
       return '<li class="item"><div class="item__main"><div class="item__meta">' + fmtDayTime(c.t) + '</div>' +
         '<div class="cert-lines">' + certSummaryHtml(c) + '</div></div>' +
-        delBtnHtml('cert', c.id, '确定性') + '</li>';
+        recordActsHtml('cert', c.id, '确定性') + '</li>';
     }).join('') : emptyItem('还没有确定性整理。');
 
     var trEl = $('#rec-tr');
@@ -2109,7 +2330,7 @@
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.thought || '（没写自动思维）') + '</div>' +
           '<div class="small muted">情境：' + esc((r.situation || '').slice(0, 60)) + '</div>' +
           '<div class="item__meta">' + (r.intensity != null ? r.intensity : '?') + ' → ' + (r.after != null ? r.after : '?') + ' · ' + fmtDayTime(r.t) + '</div></div>' +
-          delBtnHtml('tr', r.id, '思维') + '</li>';
+          recordActsHtml('tr', r.id, '思维') + '</li>';
       }).join('') : emptyItem('还没有思维记录。');
     }
 
@@ -2119,7 +2340,7 @@
         return '<li class="item"><div class="item__main"><div class="item__text">' + esc(r.did || r.fact || '（没写内容）') + '</div>' +
           '<div class="small muted">' + esc(r.tomorrow ? '明天：' + r.tomorrow : '') + '</div>' +
           '<div class="item__meta">' + fmtDayTime(r.t) + '</div></div>' +
-          delBtnHtml('sleep', r.id, '睡前') + '</li>';
+          recordActsHtml('sleep', r.id, '睡前') + '</li>';
       }).join('') : emptyItem('还没有睡前记录。');
     }
 
@@ -2129,9 +2350,171 @@
         var d = (r.before != null && r.after != null) ? (r.before - r.after) : 0;
         return '<li class="item"><div class="item__main"><div class="item__text">强度 ' + r.before + ' → ' + r.after + (d > 0 ? '（降 ' + d + '）' : '') + '</div>' +
           '<div class="item__meta">' + (r.need && r.need.length ? esc(r.need.join('、')) + ' · ' : '') + fmtDayTime(r.t) + '</div></div>' +
-          delBtnHtml('sos', r.id, '着陆') + '</li>';
+          recordActsHtml('sos', r.id, '着陆') + '</li>';
       }).join('') : emptyItem('还没有着陆记录。');
     }
+  }
+
+  /* ---------------- 记录编辑 ---------------- */
+
+  var KIND_ORDER = ['why', 'if', 'self', 'others', 'other'];
+
+  var EDIT_SPEC = {
+    rum: {
+      kicker: '反刍日志',
+      title: '改这条反刍记录',
+      required: ['thought'],
+      requiredMsg: '当时脑子里的话不能空着。',
+      fields: [
+        { k: 'thought', label: '当时脑子里的话', type: 'textarea', rows: 3, max: 2000 },
+        { k: 'kind', label: '属于哪一类', type: 'select', options: KIND_ORDER.map(function (k) { return [k, KIND_LABEL[k]]; }) },
+        { k: 'action', label: '下次我会…', type: 'textarea', rows: 2, max: 1000, hint: '可以留空。' }
+      ]
+    },
+    tr: {
+      kicker: '思维记录',
+      title: '改这条思维记录',
+      required: ['thought'],
+      requiredMsg: '自动思维不能空着。',
+      fields: [
+        { k: 'situation', label: '1 · 情境', type: 'textarea', rows: 2 },
+        { k: 'thought', label: '2 · 自动思维', type: 'textarea', rows: 2 },
+        { k: 'belief', label: '3 · 当时有多相信它（0–100）', type: 'number', min: 0, max: 100, step: 5 },
+        { k: 'emotion', label: '4 · 情绪', type: 'text' },
+        { k: 'intensity', label: '情绪强度（0–100）', type: 'number', min: 0, max: 100, step: 5 },
+        { k: 'for', label: '5 · 支持它的证据', type: 'textarea', rows: 2 },
+        { k: 'against', label: '6 · 反对它的证据', type: 'textarea', rows: 2 },
+        { k: 'balanced', label: '7 · 更平衡的一句话', type: 'textarea', rows: 2 },
+        { k: 'after', label: '8 · 现在强度（0–100）', type: 'number', min: 0, max: 100, step: 5 }
+      ]
+    },
+    cert: {
+      kicker: '确定性整理',
+      title: '改这份四格整理',
+      required: [],
+      fields: [
+        { k: 'fact', label: '1 · 事实', type: 'textarea', rows: 2 },
+        { k: 'interp', label: '2 · 解释', type: 'textarea', rows: 2 },
+        { k: 'unknown', label: '3 · 不可知', type: 'textarea', rows: 2 },
+        { k: 'next', label: '4 · 下一步', type: 'textarea', rows: 2 }
+      ]
+    },
+    sleep: {
+      kicker: '睡前 3 行',
+      title: '改这条睡前记录',
+      required: [],
+      fields: [
+        { k: 'fact', label: '今天发生了什么（事实）', type: 'textarea', rows: 2 },
+        { k: 'did', label: '我今天做到了什么', type: 'textarea', rows: 2 },
+        { k: 'tomorrow', label: '明天最小的一件', type: 'textarea', rows: 2 }
+      ]
+    },
+    sos: {
+      kicker: '着陆记录',
+      title: '改这次着陆的分数',
+      required: [],
+      fields: [
+        { k: 'before', label: '开始前强度（0–10）', type: 'number', min: 0, max: 10 },
+        { k: 'after', label: '之后强度（0–10）', type: 'number', min: 0, max: 10 }
+      ]
+    }
+  };
+
+  var editState = null;
+
+  function editFieldHtml(f, val) {
+    var id = 'ef-' + f.k;
+    var label = '<label for="' + id + '">' + esc(f.label) + '</label>';
+    var hint = f.hint ? '<p class="hint">' + esc(f.hint) + '</p>' : '';
+    var input;
+    if (f.type === 'select') {
+      input = '<select id="' + id + '">' + f.options.map(function (o) {
+        return '<option value="' + esc(o[0]) + '"' + (String(val) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      }).join('') + '</select>';
+    } else if (f.type === 'number') {
+      input = '<input type="number" id="' + id + '" min="' + f.min + '" max="' + f.max + '" step="' + (f.step || 1) +
+        '" value="' + esc(val === '' || val == null ? '' : val) + '" inputmode="numeric">';
+    } else if (f.type === 'text') {
+      input = '<input type="text" id="' + id + '" maxlength="' + (f.max || 200) + '" value="' + esc(val || '') + '">';
+    } else {
+      input = '<textarea id="' + id + '" rows="' + (f.rows || 3) + '" maxlength="' + (f.max || 2000) + '">' + esc(val || '') + '</textarea>';
+    }
+    return '<div class="field">' + label + input + hint + '</div>';
+  }
+
+  function findRecord(kind, id) {
+    var arr = (state && state[kind]) || [];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].id === id) return arr[i];
+    }
+    return null;
+  }
+
+  function editError(msg) {
+    var el = $('#edit-err');
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  function editRecord(kind, id) {
+    var spec = EDIT_SPEC[kind];
+    if (!spec || !state) return;
+    var item = findRecord(kind, id);
+    if (!item) return;
+    editState = { kind: kind, id: id };
+    var k = $('#edit-kicker');
+    if (k) k.textContent = spec.kicker + ' · ' + fmtDayTime(item.t);
+    var t = $('#edit-title');
+    if (t) t.textContent = spec.title;
+    var host = $('#edit-fields');
+    if (host) {
+      host.innerHTML = spec.fields.map(function (f) {
+        return editFieldHtml(f, item[f.k] == null ? '' : item[f.k]);
+      }).join('');
+    }
+    var err = $('#edit-err');
+    if (err) { err.hidden = true; err.textContent = ''; }
+    openOverlay('#edit-overlay', '#ef-' + spec.fields[0].k);
+  }
+
+  function closeEdit() {
+    editState = null;
+    closeOverlay('#edit-overlay');
+  }
+
+  function saveEdit() {
+    if (!editState || !state) return;
+    var spec = EDIT_SPEC[editState.kind];
+    if (!spec) { closeEdit(); return; }
+    var item = findRecord(editState.kind, editState.id);
+    if (!item) { closeEdit(); showToast('这条已经不在了。'); return; }
+    var next = {};
+    spec.fields.forEach(function (f) {
+      var el = $('#ef-' + f.k);
+      var raw = el ? String(el.value || '') : '';
+      if (f.type === 'number') {
+        var n = Number(raw);
+        next[f.k] = raw === '' || isNaN(n) ? item[f.k] : clamp(Math.round(n), f.min, f.max);
+      } else {
+        next[f.k] = raw.trim().slice(0, f.max || 2000);
+      }
+    });
+    var required = spec.required || [];
+    for (var i = 0; i < required.length; i++) {
+      if (!next[required[i]]) {
+        editError(spec.requiredMsg || '有一格不能空着。');
+        var first = $('#ef-' + required[i]);
+        if (first) { try { first.focus(); } catch (e) { /* ignore */ } }
+        return;
+      }
+    }
+    Object.keys(next).forEach(function (key) { item[key] = next[key]; });
+    item.editedAt = Date.now();
+    save();
+    closeEdit();
+    renderAll();
+    showToast('改好了。');
   }
 
   /* ---------------- 思维记录 ---------------- */
@@ -2811,6 +3194,18 @@
     'it-again': function () { resetIntercept(); showITStep(1); },
     'save-cert': saveCert,
     'clear-cert': function () { clearCertFields(); showToast('已清空输入。'); },
+    'edit-record': function (el) {
+      editRecord(el.getAttribute('data-kind'), el.getAttribute('data-id'));
+    },
+    'save-edit': saveEdit,
+    'close-edit': closeEdit,
+    'sp-view': openSpView,
+    'close-sp-view': closeSpView,
+    'sp-edit': function () {
+      closeSpView();
+      if ($('#sos-overlay') && !$('#sos-overlay').hidden) closeSOS();
+      go('safety');
+    },
     'del-record': function (el) {
       removeRecord(el.getAttribute('data-kind'), el.getAttribute('data-id'));
     },
@@ -2831,6 +3226,8 @@
     'export-json': exportJSON,
     'export-md': exportMD,
     'export-review': exportReview,
+    'export-summary': exportSummary,
+    'rv-kind': function (el) { setFilterKind(el.getAttribute('data-rv-kind')); },
     'import-json': importJSON,
     'close-import': closeImport,
     'import-merge': mergeImport,
@@ -2942,6 +3339,13 @@
       }
     }
 
+    var routeLink = e.target.closest ? e.target.closest('a[data-route]') : null;
+    if (routeLink && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && (e.button === 0 || e.button === undefined)) {
+      e.preventDefault();
+      go(routeLink.getAttribute('data-route'));
+      return;
+    }
+
     var chip = e.target.closest ? e.target.closest('[data-need]') : null;
     if (chip) {
       chip.classList.toggle('is-on');
@@ -3028,7 +3432,19 @@
 
   document.addEventListener('input', function (e) {
     var t = e.target;
-    if (!t || t.tagName !== 'INPUT' || t.type !== 'range') return;
+    if (!t) return;
+    if (t.id === 'review-q') {
+      rvFilter.q = String(t.value || '').slice(0, 40);
+      if (rvTimer) clearTimeout(rvTimer);
+      rvTimer = setTimeout(renderFilter, 220);
+      return;
+    }
+    if (t.id && t.id.indexOf('ef-') === 0) {
+      var errEl = $('#edit-err');
+      if (errEl && !errEl.hidden) { errEl.hidden = true; errEl.textContent = ''; }
+      return;
+    }
+    if (t.tagName !== 'INPUT' || t.type !== 'range') return;
     var min = Number(t.min) || 0;
     var max = Number(t.max) || 100;
     var v = Number(t.value);
@@ -3124,6 +3540,8 @@
     if (e.key === 'Escape') {
       if ($('#pass-overlay') && !$('#pass-overlay').hidden) { closePass(); return; }
       if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
+      if ($('#edit-overlay') && !$('#edit-overlay').hidden) { closeEdit(); return; }
+      if ($('#sp-overlay') && !$('#sp-overlay').hidden) { closeSpView(); return; }
       if ($('#sos-overlay') && !$('#sos-overlay').hidden) { closeSOS(); return; }
       if ($('#intercept-overlay') && !$('#intercept-overlay').hidden) { closeIntercept(); return; }
     }

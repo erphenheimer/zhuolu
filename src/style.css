@@ -523,7 +523,8 @@ html[data-motion="reduce"] *::after { animation-duration: .01ms !important; tran
   align-items: baseline;
 }
 .field .hint { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
-input[type="text"], input[type="time"], input[type="password"], input[type="url"], textarea, select {
+input[type="text"], input[type="time"], input[type="password"], input[type="url"],
+input[type="search"], input[type="number"], textarea, select {
   width: 100%;
   font: inherit;
   font-size: 15px;
@@ -537,7 +538,8 @@ input[type="text"], input[type="time"], input[type="password"], input[type="url"
 }
 textarea { resize: vertical; min-height: 84px; }
 input[type="text"]:focus, input[type="time"]:focus, input[type="password"]:focus,
-input[type="url"]:focus, textarea:focus, select:focus {
+input[type="url"]:focus, input[type="search"]:focus, input[type="number"]:focus,
+textarea:focus, select:focus {
   outline: none;
   border-color: var(--sage);
   background: var(--surface);
@@ -1319,7 +1321,8 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .intensity-num { font-size: 46px; min-width: 62px; }
   .window-time { font-size: 46px; }
   .toast { bottom: 104px; }
-  input[type="text"], input[type="time"], textarea, select,
+  input[type="text"], input[type="time"], input[type="search"], input[type="number"],
+  textarea, select,
   .matrix__cell textarea, .sleep-grid textarea { font-size: 16px; }
 }
 
@@ -1913,5 +1916,95 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
   padding-top: 8px;
   font-size: 11px;
   color: #444;
+}
+
+/* ============================================================
+   着陆台 · 样式 04 —— 0.5.0：记录编辑、主题筛选、安全计划速览
+   ============================================================ */
+
+/* ---------- 列表里的操作按钮 ---------- */
+.item__acts { display: flex; align-items: center; gap: 6px; flex: none; }
+.icon-btn--edit:hover { color: var(--sage); border-color: var(--sage); }
+
+/* ---------- 编辑浮层 ---------- */
+#edit-fields .field { margin-bottom: 14px; }
+#edit-fields textarea { min-height: 68px; }
+#edit-fields .field:last-child { margin-bottom: 4px; }
+.edit-err { margin: 12px 0 14px; }
+
+/* ---------- 按主题找记录 ---------- */
+#review-kinds { margin: 2px 0 0; }
+#filter-hits { margin: 6px 0 0; }
+#filter-hits .item:first-child { border-top: 1px solid var(--line-soft); }
+#filter-hits .item__text { font-size: 13.5px; color: var(--ink-2); }
+#filter-hits .empty { text-align: left; }
+mark {
+  background: var(--sage-soft);
+  color: var(--ink);
+  border-radius: 3px;
+  padding: 0 2px;
+  box-shadow: 0 0 0 1px var(--sage-soft);
+}
+
+/* ---------- 安全页的“先着陆”入口 ---------- */
+.safety-quick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  flex-wrap: wrap;
+  margin: 14px 0 28px;
+  padding: 14px 18px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.safety-quick__t { flex: 1 1 230px; font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+.safety-quick .btn { flex: none; }
+
+/* ---------- 着陆浮层里的安全计划入口 ---------- */
+.sos-plan-link { margin-top: 16px; }
+.sos-plan-link .link-btn { font-size: 13px; }
+
+/* ---------- 安全计划速览 ---------- */
+.sp-view { margin-top: 6px; }
+.sp-view__crisis {
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border-radius: var(--r-sm);
+  background: var(--sage-soft);
+  font-size: 13px;
+  line-height: 1.75;
+}
+.sp-view__crisis b { display: block; margin-bottom: 2px; color: var(--sage); }
+.sp-view__crisis a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--sage-line); }
+.sp-view__block { margin-bottom: 20px; }
+.sp-view__block h3 {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.sp-view__block ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.sp-view__block li { position: relative; padding-left: 16px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.sp-view__block li::before {
+  content: "·";
+  position: absolute;
+  left: 3px;
+  top: -1px;
+  color: var(--sage);
+  font-weight: 700;
+}
+.sp-view__block a { color: var(--sage); text-decoration: none; border-bottom: 1px solid var(--sage-line); }
+.sp-view .sp-k { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+
+@media (max-width: 520px) {
+  .item { gap: 10px; }
+  .item__acts { gap: 5px; }
+  .safety-quick { padding: 13px 15px; }
+  .sp-view__block li { font-size: 13.5px; }
 }
 
