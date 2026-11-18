@@ -329,6 +329,17 @@
         <figure class="chart" id="chart-rum"></figure>
       </div>
 
+      <div class="card" id="period-card">
+        <div class="card-head"><h2 class="h3">这一段和上一段</h2><span class="badge" id="period-badge">—</span></div>
+        <div class="period" id="period-compare"></div>
+        <p class="small muted mt-16 mb-0" id="period-note">同样长的两段并排，只看方向。</p>
+      </div>
+
+      <div class="card" id="rum-merge-card">
+        <div class="card-head"><h2 class="h3">反刍在往哪个方向绕</h2><span class="badge" id="rum-merge-badge">—</span></div>
+        <ul class="list" id="rum-merge"></ul>
+      </div>
+
       <div class="card card--quiet">
         <div class="card-head"><h2 class="h3">这段时间</h2></div>
         <ul class="review-notes" id="review-notes"></ul>
@@ -336,7 +347,7 @@
 
       <div class="card" id="filter-card">
         <div class="card-head"><h2 class="h3">按主题找记录</h2><span class="badge" id="filter-count">—</span></div>
-        <p class="small muted mb-16">写一个词，把这段时间里提到它的记录挑出来。想在见咨询师前整理一份带原话的小结，用这个。</p>
+        <p class="small muted mb-16">写一个词，把全部记录里提到它的挑出来。想在见咨询师前整理一份带原话的小结，用这个。</p>
         <div class="field">
           <label for="review-q">关键词</label>
           <input type="search" id="review-q" placeholder="例：他、工作、睡不着、对不起" maxlength="40" autocomplete="off">
@@ -348,6 +359,11 @@
           <button class="chip" data-action="rv-kind" data-rv-kind="cert" aria-pressed="false">确定性</button>
           <button class="chip" data-action="rv-kind" data-rv-kind="sleep" aria-pressed="false">睡前</button>
           <button class="chip" data-action="rv-kind" data-rv-kind="sos" aria-pressed="false">着陆</button>
+        </div>
+        <div class="chips" id="review-range" aria-label="时间范围">
+          <button class="chip is-on" data-action="rv-range" data-rv-range="all" aria-pressed="true">全部时间</button>
+          <button class="chip" data-action="rv-range" data-rv-range="30" aria-pressed="false">近 30 天</button>
+          <button class="chip" data-action="rv-range" data-rv-range="7" aria-pressed="false">近 7 天</button>
         </div>
         <p class="small muted mt-16" id="filter-note">还没输入关键词。</p>
         <ul class="list hit-list" id="filter-hits"></ul>
@@ -571,7 +587,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（localStorage），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.5.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.6.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 

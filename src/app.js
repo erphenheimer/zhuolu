@@ -6,7 +6,7 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.5.0';
+  var APP_VERSION = '0.6.0';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
   var KDF_ITER = 210000;
@@ -2020,6 +2020,110 @@
     return notes;
   }
 
+  /* ---------------- 周期对比 ---------------- */
+
+  function windowStats(days, offset) {
+    var end = startOfDay() - offset * 86400000;
+    var start = end - (days - 1) * 86400000;
+    var stop = end + 86400000;
+    var s = { sos: 0, beforeSum: 0, beforeN: 0, afterSum: 0, afterN: 0, rum: 0, checkDone: 0 };
+    (state.sos || []).forEach(function (r) {
+      if (!r || !r.t || r.t < start || r.t >= stop) return;
+      s.sos++;
+      if (typeof r.before === 'number') { s.beforeSum += r.before; s.beforeN++; }
+      if (typeof r.after === 'number') { s.afterSum += r.after; s.afterN++; }
+    });
+    (state.rum || []).forEach(function (r) {
+      if (r && r.t && r.t >= start && r.t < stop) s.rum++;
+    });
+    for (var i = 0; i < days; i++) {
+      var dd = state.daily[dayKey(new Date(start + i * 86400000))];
+      if (dd && typeof dd === 'object') {
+        CHECKS.forEach(function (c) { if (dd[c]) s.checkDone++; });
+      }
+    }
+    s.drop = (s.beforeN && s.afterN) ? (s.beforeSum / s.beforeN) - (s.afterSum / s.afterN) : null;
+    return s;
+  }
+
+  function deltaText(a, b, digits) {
+    if (a == null || b == null) return '—';
+    var d = b - a;
+    if (Math.abs(d) < (digits ? 0.05 : 0.5)) return '持平';
+    return (d > 0 ? '+' : '−') + Math.abs(d).toFixed(digits ? 1 : 0);
+  }
+
+  function numText(v, digits) {
+    if (v == null) return '—';
+    if (digits) return v.toFixed(digits);
+    return v === Math.round(v) ? String(v) : v.toFixed(1);
+  }
+
+  function renderPeriod() {
+    var host = $('#period-compare');
+    if (!host || !state) return;
+    var days = reviewDays;
+    var cur = windowStats(days, 0);
+    var prev = windowStats(days, days);
+    var badge = $('#period-badge');
+    if (badge) badge.textContent = days + ' 天 / ' + days + ' 天';
+    var rows = [
+      { label: '着陆次数', a: prev.sos, b: cur.sos, d: deltaText(prev.sos, cur.sos) },
+      { label: '平均降幅', a: prev.drop, b: cur.drop, d: deltaText(prev.drop, cur.drop, 1), digits: 1 },
+      { label: '反刍登记', a: prev.rum, b: cur.rum, d: deltaText(prev.rum, cur.rum) },
+      { label: '打卡完成', a: prev.checkDone, b: cur.checkDone, d: deltaText(prev.checkDone, cur.checkDone) }
+    ];
+    host.innerHTML =
+      '<div class="period-row period-row--head"><span>指标</span><span>上一段</span><span>这一段</span><span>变化</span></div>' +
+      rows.map(function (r) {
+        return '<div class="period-row"><span>' + r.label + '</span><span>' + numText(r.a, r.digits) +
+          '</span><span>' + numText(r.b, r.digits) + '</span><span class="period-delta">' + r.d + '</span></div>';
+      }).join('');
+    var note = $('#period-note');
+    if (note) {
+      note.textContent = (prev.sos + cur.sos === 0)
+        ? '两段都还没有着陆记录。等有记录了再来看方向。'
+        : '上一段 ' + fmtShortDate(startOfDay() - (days * 2 - 1) * 86400000) + ' – ' +
+          fmtShortDate(startOfDay() - days * 86400000) + '，这一段 ' +
+          fmtShortDate(startOfDay() - (days - 1) * 86400000) + ' – 今天。只看方向，不评好坏。';
+    }
+  }
+
+  function renderRumMerge() {
+    var host = $('#rum-merge');
+    if (!host || !state) return;
+    var days = reviewDays;
+    var since = startOfDay() - (days - 1) * 86400000;
+    var ORDER = ['why', 'if', 'self', 'others', 'other'];
+    var by = {}, last = {};
+    (state.rum || []).forEach(function (r) {
+      if (!r || !r.t || r.t < since) return;
+      var k = KIND_LABEL[r.kind] ? r.kind : 'other';
+      by[k] = (by[k] || 0) + 1;
+      if (!last[k] || r.t > last[k].t) last[k] = r;
+    });
+    var keys = Object.keys(by).sort(function (a, b) {
+      if (by[b] !== by[a]) return by[b] - by[a];
+      return ORDER.indexOf(a) - ORDER.indexOf(b);
+    });
+    var total = 0;
+    keys.forEach(function (k) { total += by[k]; });
+    var badge = $('#rum-merge-badge');
+    if (badge) badge.textContent = keys.length ? '近 ' + days + ' 天 · ' + total + ' 次' : '—';
+    if (!keys.length) {
+      host.innerHTML = '<li class="empty">这 ' + days + ' 天没有反刍登记。有登记时，这里会按类型归并，能看出反复绕的是哪一类。</li>';
+      return;
+    }
+    host.innerHTML = keys.map(function (k) {
+      var r = last[k];
+      var text = [r.thought, r.action].filter(function (x) { return x; }).join(' · ');
+      return '<li class="item"><div class="item__main">' +
+        '<div class="item__text">' + esc(snippetOf(text, '', 60)) + '</div>' +
+        '<div class="item__meta">' + KIND_LABEL[k] + ' · ' + by[k] + ' 次 · 最近 ' + fmtDayTime(r.t) + '</div>' +
+        '</div></li>';
+    }).join('');
+  }
+
   function renderReview() {
     var data = buildReviewData(reviewDays);
     renderReviewSummary(data);
@@ -2074,6 +2178,8 @@
     var homeLink = $('#home-review-link');
     if (homeLink) homeLink.hidden = recordCount() === 0;
 
+    renderPeriod();
+    renderRumMerge();
     renderFilter();
   }
 
@@ -2108,8 +2214,30 @@
   };
   var HIT_ORDER = ['rum', 'tr', 'cert', 'sleep', 'sos'];
 
-  var rvFilter = { q: '', kind: 'all' };
+  var rvFilter = { q: '', kind: 'all', range: 'all' };
   var rvTimer = null;
+  var RV_RANGE = { all: 0, '30': 30, '7': 7 };
+
+  function rvRangeDays() { return RV_RANGE[rvFilter.range] || 0; }
+
+  function rvSince() {
+    var d = rvRangeDays();
+    return d ? startOfDay() - (d - 1) * 86400000 : 0;
+  }
+
+  function rvWhere() { return rvRangeDays() ? '近 ' + rvRangeDays() + ' 天里' : '全部记录里'; }
+
+  function allSpanDays() {
+    if (!state) return 1;
+    var first = 0;
+    HIT_ORDER.forEach(function (k) {
+      (state[k] || []).forEach(function (r) {
+        if (r && r.t && (!first || r.t < first)) first = r.t;
+      });
+    });
+    if (!first) return 1;
+    return Math.min(3650, Math.max(1, Math.floor((startOfDay() - startOfDay(new Date(first))) / 86400000) + 1));
+  }
 
   function recordText(r, fields) {
     return fields.map(function (f) {
@@ -2119,9 +2247,9 @@
     }).filter(function (s) { return s !== ''; }).join(' · ');
   }
 
-  function collectHits(days) {
+  function collectHits() {
     if (!state) return [];
-    var since = startOfDay() - (Math.max(1, days) - 1) * 86400000;
+    var since = rvSince();
     var q = rvFilter.q.trim().toLowerCase();
     var kinds = rvFilter.kind === 'all' ? HIT_ORDER : [rvFilter.kind];
     var out = [];
@@ -2179,8 +2307,12 @@
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    $$('[data-rv-range]').forEach(function (b) {
+      var onR = b.getAttribute('data-rv-range') === rvFilter.range;
+      b.classList.toggle('is-on', onR);
+      b.setAttribute('aria-pressed', onR ? 'true' : 'false');
+    });
     var q = rvFilter.q.trim();
-    var scope = '近 ' + reviewDays + ' 天';
     var count = $('#filter-count');
     var note = $('#filter-note');
     var host = $('#filter-hits');
@@ -2190,13 +2322,13 @@
       if (host) host.innerHTML = '';
       return;
     }
-    var hits = collectHits(reviewDays);
+    var hits = collectHits();
     if (count) count.textContent = hits.length + ' 条';
     var cond = (q ? '含「' + q + '」的' : '') + (rvFilter.kind === 'all' ? '记录' : HIT_META[rvFilter.kind].label + '记录');
     if (note) {
       note.textContent = hits.length
-        ? scope + '里' + cond + '有 ' + hits.length + ' 条' + (hitCountText(hits) ? '：' + hitCountText(hits) : '') + '。'
-        : scope + '里没有' + cond + '。换个词，或者把范围切到近 30 天。';
+        ? rvWhere() + cond + '有 ' + hits.length + ' 条' + (hitCountText(hits) ? '：' + hitCountText(hits) + '。' : '。')
+        : rvWhere() + '没有' + cond + '。' + (rvRangeDays() ? '换个词，或者把范围切到全部时间。' : '换个词试试。');
     }
     if (!host) return;
     if (!hits.length) { host.innerHTML = ''; return; }
@@ -2219,14 +2351,14 @@
       if (i) { try { i.focus(); } catch (e) { /* ignore */ } }
       return;
     }
-    var hits = collectHits(reviewDays);
-    if (!hits.length) { showToast('这段时间里没有符合条件的记录。'); return; }
-    var data = buildReviewData(reviewDays);
+    var hits = collectHits();
+    if (!hits.length) { showToast('这个范围里没有符合条件的记录。'); return; }
+    var data = buildReviewData(rvRangeDays() || allSpanDays());
     var first = data.list[0].d, last = data.list[data.list.length - 1].d;
     var lines = [];
     lines.push('# 着陆台 · 阶段性小结');
     lines.push('');
-    lines.push('- 时间范围：近 ' + reviewDays + ' 天（' + fmtShortDate(first.getTime()) + ' – ' + fmtShortDate(last.getTime()) + '）');
+    lines.push('- 时间范围：' + (rvRangeDays() ? '近 ' + rvRangeDays() + ' 天' : '全部记录') + '（' + fmtShortDate(first.getTime()) + ' – ' + fmtShortDate(last.getTime()) + '）');
     lines.push('- 导出时间：' + fmtDateFull(new Date()) + ' ' + fmtClock(Date.now()));
     lines.push('- 筛选：' + (q ? '关键词「' + q + '」' : '没有关键词') + ' · ' + (rvFilter.kind === 'all' ? '全部类型' : HIT_META[rvFilter.kind].label));
     lines.push('- 符合的记录：' + hits.length + ' 条' + (hitCountText(hits) ? '（' + hitCountText(hits) + '）' : ''));
@@ -2254,6 +2386,11 @@
 
   function setFilterKind(kind) {
     rvFilter.kind = HIT_META[kind] ? kind : 'all';
+    renderFilter();
+  }
+
+  function setFilterRange(range) {
+    rvFilter.range = RV_RANGE.hasOwnProperty(range) ? range : 'all';
     renderFilter();
   }
 
@@ -3228,6 +3365,7 @@
     'export-review': exportReview,
     'export-summary': exportSummary,
     'rv-kind': function (el) { setFilterKind(el.getAttribute('data-rv-kind')); },
+    'rv-range': function (el) { setFilterRange(el.getAttribute('data-rv-range')); },
     'import-json': importJSON,
     'close-import': closeImport,
     'import-merge': mergeImport,

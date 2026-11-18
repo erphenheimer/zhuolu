@@ -185,10 +185,26 @@ def assert_no_overflow(page, label):
         " return { sw: de.scrollWidth, cw: de.clientWidth,"
         " bsw: b.scrollWidth, bcw: b.clientWidth }; }"
     )
-    assert dims["sw"] <= dims["cw"] + 1, (
-        "%s 横向溢出：documentElement.scrollWidth=%s > clientWidth=%s"
-        % (label, dims["sw"], dims["cw"])
-    )
+    if dims["sw"] > dims["cw"] + 1:
+        wide = page.evaluate(
+            "() => { const vw = document.documentElement.clientWidth, out = [];"
+            " document.querySelectorAll('body *').forEach(el => {"
+            " const r = el.getBoundingClientRect();"
+            " if (r.width && r.right > vw + 0.5) {"
+            " out.push((el.id ? '#' + el.id : el.tagName.toLowerCase()) +"
+            " (el.className ? '.' + String(el.className).split(' ')[0] : '') +"
+            " '→' + Math.round(r.right)); } });"
+            " document.querySelectorAll('body *').forEach(el => {"
+            " if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {"
+            " out.push('文字:' + (el.id ? '#' + el.id : el.tagName.toLowerCase()) +"
+            " (el.className ? '.' + String(el.className).split(' ')[0] : '') +"
+            " '+' + (el.scrollWidth - el.clientWidth)); } });"
+            " return out.slice(0, 8); }"
+        )
+        raise AssertionError(
+            "%s 横向溢出：documentElement.scrollWidth=%s > clientWidth=%s｜%s"
+            % (label, dims["sw"], dims["cw"], " ".join(wide) or "没有单个元素越界，可能是文字撑开")
+        )
     assert dims["bsw"] <= dims["bcw"] + 1, (
         "%s 横向溢出：body.scrollWidth=%s > clientWidth=%s"
         % (label, dims["bsw"], dims["bcw"])
@@ -827,7 +843,13 @@ def _park_save(page):
     state = app_state(page)
     assert state and len(state.get("parked", [])) == 1, "parked 数量不是 1"
     assert "先把这个念头放进盒子" == state["parked"][0]["text"], "盒子文本未保存"
-    wait_text(page, "#parked-hint", "1 个念头")
+    # 提示文案跟着担忧窗口开 / 关变：窗口开着说「处理完一个」，关着才说「1 个念头」。
+    # 默认窗口 19:30 起算，QA 若正好跑在这个时段，窗口是按计划开着的，两种都算过。
+    page.wait_for_function(
+        "() => { const t = document.querySelector('#parked-hint').textContent;"
+        " return t.includes('1 个念头') || t.includes('处理完一个'); }",
+        timeout=8000,
+    )
     return "盒子 1 条，提示文案已更新"
 
 
@@ -2366,6 +2388,7 @@ def _safety_overflow(page):
 
 MARK = "QA-主题-标记"
 OLD_MARK = "QA-旧记录-标记"
+ANCIENT_MARK = "QA-远古-标记"
 
 
 def _seed_records(page):
@@ -2388,6 +2411,13 @@ def _seed_records(page):
                 "id": "qa-rum-old",
                 "t": stamp - 20 * 86400000,
                 "thought": "QA-反刍-二十天前 " + OLD_MARK + " " + MARK,
+                "kind": "why",
+                "action": "",
+            },
+            {
+                "id": "qa-rum-ancient",
+                "t": stamp - 45 * 86400000,
+                "thought": "QA-反刍-四十五天前 " + ANCIENT_MARK + " " + MARK,
                 "kind": "why",
                 "action": "",
             },
@@ -2437,12 +2467,12 @@ def _seed_records(page):
     total = page.eval_on_selector_all(
         ".tab-panel [data-action='edit-record']", "els => els.length"
     )
-    assert total == 6, "标签页里应有 6 个「改」按钮（反刍 2 + 确定性/思维/睡前/着陆），实际 %d" % total
+    assert total == 7, "标签页里应有 7 个「改」按钮（反刍 3 + 确定性/思维/睡前/着陆），实际 %d" % total
     dels = page.eval_on_selector_all(".tab-panel [data-action='del-record']", "els => els.length")
-    assert dels == 6, "删除按钮应有 6 个，实际 %d" % dels
+    assert dels == 7, "删除按钮应有 7 个，实际 %d" % dels
     cert_page = page.eval_on_selector_all("#cert-list [data-action='edit-record']", "els => els.length")
     assert cert_page == 1, "确定性页的历史列表也应能改，实际 %d 个入口" % cert_page
-    return "5 类共 6 条记录，改 / 删各 6 个；确定性页 1 个入口"
+    return "5 类共 7 条记录，改 / 删各 7 个；确定性页 1 个入口"
 
 
 def _edit_rum(page):
@@ -2457,7 +2487,7 @@ def _edit_rum(page):
     wait_text(page, "#rec-rum", "QA-反刍-改过了")
     state = app_state(page)
     rum = state["rum"]
-    assert len(rum) == 2, "编辑后不应新增记录，实际 %d 条" % len(rum)
+    assert len(rum) == 3, "编辑后不应新增记录，实际 %d 条" % len(rum)
     item = [r for r in rum if r["id"] == "qa-rum"][0]
     assert item["thought"].startswith("QA-反刍-改过了"), "落盘内容不对: %s" % item["thought"]
     assert item["action"] == "QA-下一步", "没改的字段被清掉了"
@@ -2516,7 +2546,7 @@ def _edit_reload(page):
     visible(page, ".view[data-view='more'].is-active")
     wait_text(page, "#rec-rum", "QA-反刍-改过了")
     state = app_state(page)
-    assert len(state["rum"]) == 2, "刷新后条数变了"
+    assert len(state["rum"]) == 3, "刷新后条数变了"
     return "刷新后修改仍在"
 
 
@@ -2530,20 +2560,40 @@ def _filter_initial(page):
 
 def _filter_hits(page):
     page.fill("#review-q", MARK)
-    wait_text(page, "#filter-count", "4 条")
+    wait_text(page, "#filter-count", "6 条")
     metas = page.eval_on_selector_all(
         "#filter-hits .item__meta", "els => els.map(e => e.textContent.trim())"
     )
-    assert len(metas) == 4, "近 7 天应有 4 条，实际 %d" % len(metas)
+    assert len(metas) == 6, "默认搜全部时间应有 6 条，实际 %d" % len(metas)
     assert metas[0].startswith("反刍"), "应按时间倒序，第一条是 %s" % metas[0]
+    assert "二十天前" not in metas[0] and "四十五天前" not in metas[0], "最新一条排错了"
     marks = page.eval_on_selector_all("#filter-hits mark", "els => els.length")
-    assert marks >= 4, "命中词应高亮，实际 %d 处" % marks
+    assert marks >= 6, "命中词应高亮，实际 %d 处" % marks
     note = page.inner_text("#filter-note")
-    assert "近 7 天" in note and "4 条" in note, "提示文案不对: %s" % note
-    return "4 条 · 高亮 %d 处 · 倒序" % marks
+    assert "全部记录" in note and "6 条" in note, "提示文案不对: %s" % note
+    return "6 条（含 45 天前）· 高亮 %d 处 · 倒序" % marks
+
+def _filter_alltime(page):
+    page.fill("#review-q", ANCIENT_MARK)
+    wait_text(page, "#filter-count", "1 条")
+    metas = page.eval_on_selector_all(
+        "#filter-hits .item__meta", "els => els.map(e => e.textContent.trim())"
+    )
+    assert len(metas) == 1, "全部时间应只命中 45 天前那条，实际 %d 条" % len(metas)
+    assert "四十五天前" in page.inner_text("#filter-hits"), "命中的不是 45 天前那条"
+    page.click("[data-rv-range='30']")
+    page.wait_for_function(
+        "() => document.querySelector('#filter-count').textContent.trim() === '0 条'"
+    )
+    assert "近 30 天" in page.inner_text("#filter-note"), "切到 30 天后提示没更新"
+    page.click("[data-rv-range='all']")
+    wait_text(page, "#filter-count", "1 条")
+    return "45 天前的记录默认搜得到；收窄到 30 天变 0 条"
 
 
 def _filter_kind(page):
+    page.fill("#review-q", MARK)
+    wait_text(page, "#filter-count", "6 条")
     page.click("[data-rv-kind='tr']")
     wait_text(page, "#filter-count", "1 条")
     metas = page.eval_on_selector_all(
@@ -2551,8 +2601,8 @@ def _filter_kind(page):
     )
     assert len(metas) == 1 and metas[0].startswith("思维记录"), "分类筛选不对: %s" % metas
     page.click("[data-rv-kind='all']")
-    wait_text(page, "#filter-count", "4 条")
-    return "只看思维记录 → 1 条，切回全部 → 4 条"
+    wait_text(page, "#filter-count", "6 条")
+    return "只看思维记录 → 1 条，切回全部 → 6 条"
 
 
 def _filter_none(page):
@@ -2563,22 +2613,31 @@ def _filter_none(page):
     assert "没有" in page.inner_text("#filter-note"), "没命中时提示不对"
     assert page.locator("#filter-hits .item").count() == 0
     page.fill("#review-q", MARK)
-    wait_text(page, "#filter-count", "4 条")
+    wait_text(page, "#filter-count", "6 条")
     return "0 条时给提示，不报错"
 
 
 def _filter_range(page):
-    page.click("[data-review-range='30']")
+    page.fill("#review-q", MARK)
+    wait_text(page, "#filter-count", "6 条")
+    page.click("[data-rv-range='30']")
     wait_text(page, "#filter-count", "5 条")
     note = page.inner_text("#filter-note")
     assert "近 30 天" in note, "范围切换后提示没更新: %s" % note
-    page.click("[data-review-range='7']")
+    page.click("[data-rv-range='7']")
     wait_text(page, "#filter-count", "4 条")
-    return "30 天含更早那条（5 条），切回 7 天 4 条"
+    on = page.eval_on_selector(
+        "[data-rv-range='7']", "e => e.getAttribute('aria-pressed')"
+    )
+    assert on == "true", "选中态没同步到 aria-pressed"
+    page.click("[data-rv-range='all']")
+    wait_text(page, "#filter-count", "6 条")
+    return "全部 6 条 → 30 天 5 条 → 7 天 4 条 → 全部 6 条"
 
 
 def _summary_export(page):
-    page.click("[data-review-range='30']")
+    page.fill("#review-q", MARK)
+    page.click("[data-rv-range='30']")
     wait_text(page, "#filter-count", "5 条")
     name, text = download_with(page, "export-summary")
     assert name.startswith("zhuolu-summary-") and name.endswith(".md"), "文件名不对: %s" % name
@@ -2588,9 +2647,15 @@ def _summary_export(page):
     assert "符合的记录：5 条" in text, "条数不对"
     assert text.count("- **") == 5, "摘录条数应为 5，实际 %d" % text.count("- **")
     assert "没有上传任何数据" in text, "缺少隐私说明"
-    page.click("[data-review-range='7']")
+    page.click("[data-rv-range='all']")
+    wait_text(page, "#filter-count", "6 条")
+    name2, text2 = download_with(page, "export-summary")
+    assert "全部记录" in text2, "全部时间的导出没写对范围"
+    assert text2.count("- **") == 6, "全部时间应 6 条摘录，实际 %d" % text2.count("- **")
+    assert ANCIENT_MARK in text2, "全部时间的导出应含 45 天前那条"
+    page.click("[data-rv-range='7']")
     wait_text(page, "#filter-count", "4 条")
-    return "%s · %d 字符 · 5 条摘录" % (name, len(text))
+    return "%s 5 条 / 全部 6 条 · 共 %d 字符" % (name, len(text) + len(text2))
 
 
 def _filter_mobile(page):
@@ -2655,6 +2720,87 @@ def _sp_from_step5(page):
     return "第 5 步 → 速览 → 去修改，浮层全部关闭"
 
 
+def _seed_windows(page):
+    stamp = now_ms()
+    day = 86400000
+
+    def key(offset):
+        return page.evaluate(
+            "o => { const d = new Date(); d.setDate(d.getDate() - o);"
+            " const p = n => String(n).padStart(2, '0');"
+            " return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }",
+            offset,
+        )
+
+    daily = {key(0): {"sleep": True, "eat": True}, key(12): {"sleep": True}}
+    state = {
+        "v": 1,
+        "firstSeen": stamp - 60 * day,
+        "sos": [
+            {"id": "w-sos-now", "t": stamp - 3600 * 1000, "before": 8, "after": 3},
+            {"id": "w-sos-prev", "t": stamp - 10 * day, "before": 6, "after": 6},
+        ],
+        "rum": [
+            {"id": "w-rum-now", "t": stamp - 1800 * 1000, "thought": "QA-周期-这一段 全是我的错", "kind": "self", "action": ""},
+            {"id": "w-rum-p1", "t": stamp - 12 * day, "thought": "QA-周期-上一段 他是不是讨厌我", "kind": "others", "action": ""},
+            {"id": "w-rum-p2", "t": stamp - 13 * day, "thought": "QA-周期-上一段 为什么又是我", "kind": "why", "action": ""},
+        ],
+        "cert": [],
+        "tr": [],
+        "sleep": [],
+        "parked": [],
+        "daily": daily,
+        "window": {"time": "19:30", "minutes": 15, "openedAt": 0, "closedDay": ""},
+        "settings": {"theme": "light", "motion": "auto", "support": ["", ""], "lastExportAt": 0},
+    }
+    page.evaluate("s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", state)
+    page.reload(wait_until="domcontentloaded")
+    nav(page, "review")
+
+
+def _period_compare(page):
+    _seed_windows(page)
+    cells = page.eval_on_selector_all(
+        "#period-compare .period-row:not(.period-row--head)",
+        "rows => rows.map(r => Array.from(r.children).map(c => c.textContent.trim()))",
+    )
+    assert len(cells) == 4, "周期对比应有 4 行，实际 %d" % len(cells)
+    by = {row[0]: row for row in cells}
+    assert by["着陆次数"][1:3] == ["1", "1"], "着陆次数两段应各 1 次: %s" % by["着陆次数"]
+    assert by["平均降幅"][1] == "0.0", "上一段降幅应 0.0: %s" % by["平均降幅"]
+    assert by["平均降幅"][2] == "5.0", "这一段降幅应 5.0: %s" % by["平均降幅"]
+    assert by["反刍登记"][1:3] == ["2", "1"], "反刍两段应为 2 / 1: %s" % by["反刍登记"]
+    assert by["打卡完成"][1:3] == ["1", "2"], "打卡两段应为 1 / 2: %s" % by["打卡完成"]
+    assert by["反刍登记"][3].startswith("−"), "反刍应从 2 降到 1: %s" % by["反刍登记"][3]
+    assert "只看方向" in page.inner_text("#period-note")
+    page.click("[data-review-range='30']")
+    wait_text(page, "#period-badge", "30 天 / 30 天")
+    page.click("[data-review-range='7']")
+    wait_text(page, "#period-badge", "7 天 / 7 天")
+    return "4 项对比：降幅 0.0 → 5.0，反刍 2 → 1，打卡 1 → 2"
+
+
+def _rum_merge(page):
+    rows = page.eval_on_selector_all(
+        "#rum-merge .item__meta", "els => els.map(e => e.textContent.trim())"
+    )
+    assert len(rows) == 1, "近 7 天只有 1 条反刍，应归并出 1 类，实际 %d 类: %s" % (len(rows), rows)
+    assert rows[0].startswith("自我否定"), "类型标签不对: %s" % rows[0]
+    assert "1 次" in rows[0], "计数不对: %s" % rows[0]
+    assert "最近" in rows[0], "应带上最近一条的时间"
+    text = page.inner_text("#rum-merge")
+    assert "全是我的错" in text, "应显示最近一条原话"
+    assert "他是不是讨厌我" not in text, "上一段的记录不该出现在近 7 天里"
+    assert "1 次" in page.inner_text("#rum-merge-badge"), "徽标总数不对"
+    page.click("[data-review-range='30']")
+    wait_text(page, "#rum-merge-badge", "近 30 天 · 3 次")
+    rows30 = page.eval_on_selector_all("#rum-merge .item__meta", "els => els.length")
+    assert rows30 == 3, "30 天应归并出 3 类，实际 %d" % rows30
+    page.click("[data-review-range='7']")
+    wait_text(page, "#rum-merge-badge", "近 7 天 · 1 次")
+    return "7 天 1 类 1 次 → 30 天 3 类 3 次"
+
+
 def group_records(run):
     desktop = {"viewport": {"width": 1280, "height": 900}}
     session = Session(run, **desktop)
@@ -2666,11 +2812,14 @@ def group_records(run):
     run.check("记录与小结", "编辑：刷新后修改仍在", lambda: _edit_reload(page), page)
     run.check("记录与小结", "筛选：初始空态", lambda: _filter_initial(page), page)
     run.check("记录与小结", "筛选：命中、高亮、倒序", lambda: _filter_hits(page), page)
+    run.check("记录与小结", "筛选：跨全部时间搜到更早的记录", lambda: _filter_alltime(page), page)
     run.check("记录与小结", "筛选：只看一类", lambda: _filter_kind(page), page)
     run.check("记录与小结", "筛选：没有命中时", lambda: _filter_none(page), page)
     run.check("记录与小结", "筛选：范围切换影响结果", lambda: _filter_range(page), page)
     run.check("记录与小结", "小结：导出 Markdown 条数一致", lambda: _summary_export(page), page)
     run.check("记录与小结", "筛选：手机字号与 320px 布局", lambda: _filter_mobile(page), page)
+    run.check("记录与小结", "趋势：这一段和上一段并排比", lambda: _period_compare(page), page)
+    run.check("记录与小结", "趋势：反刍按类型归并", lambda: _rum_merge(page), page)
     run.check("记录与小结", "安全计划：安全页一键进着陆", lambda: _safety_quick(page), page)
     run.check("记录与小结", "安全计划：着陆浮层里看速览", lambda: _sp_link_flow(page), page)
     run.check("记录与小结", "安全计划：速览跳去修改", lambda: _sp_from_step5(page), page)

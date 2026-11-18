@@ -1919,7 +1919,7 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
 }
 
 /* ============================================================
-   着陆台 · 样式 04 —— 0.5.0：记录编辑、主题筛选、安全计划速览
+   着陆台 · 样式 05 —— 0.6.0：全量检索、周期对比、反刍归并
    ============================================================ */
 
 /* ---------- 列表里的操作按钮 ---------- */
@@ -1934,6 +1934,30 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
 
 /* ---------- 按主题找记录 ---------- */
 #review-kinds { margin: 2px 0 0; }
+#review-range { margin: 10px 0 0; }
+#period-compare { margin-top: 4px; }
+.period-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr 0.7fr;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13.5px;
+  align-items: baseline;
+}
+.period-row:last-child { border-bottom: 0; }
+.period-row span { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 400px) {
+  .period-row { grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, .72fr)); gap: 6px; font-size: 13px; }
+  .period-row span { overflow-wrap: anywhere; }
+}
+.period-row span:first-child { text-align: left; color: var(--ink-2); }
+.period-row--head { font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+.period-row--head span:first-child { color: var(--muted); }
+.period-delta { color: var(--ink); }
+#rum-merge .item__text { font-size: 13.5px; color: var(--ink-2); }
+#rum-merge .item__meta { white-space: normal; }
+#rum-merge .empty { text-align: left; }
 #filter-hits { margin: 6px 0 0; }
 #filter-hits .item:first-child { border-top: 1px solid var(--line-soft); }
 #filter-hits .item__text { font-size: 13.5px; color: var(--ink-2); }
