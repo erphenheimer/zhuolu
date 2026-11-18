@@ -6,7 +6,7 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.6.0';
+  var APP_VERSION = '0.7.0';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
   var KDF_ITER = 210000;
@@ -77,7 +77,10 @@
     var b = blank();
     if (!raw || typeof raw !== 'object') return b;
     ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
-      if (Array.isArray(raw[k])) b[k] = raw[k];
+      if (!Array.isArray(raw[k])) return;
+      b[k] = raw[k].filter(function (x) { return x && typeof x === 'object'; });
+      // 没有 id 的老记录补一个：分条存储要按 id 对齐，导入去重也靠它
+      b[k].forEach(function (x) { if (!x.id) x.id = uid(); });
     });
     if (raw.daily && typeof raw.daily === 'object') b.daily = raw.daily;
     if (raw.window && typeof raw.window === 'object') {
@@ -198,69 +201,434 @@
     return uiHint.motion || 'auto';
   }
 
-  function readRawStore() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return null;
-      var obj = JSON.parse(raw);
-      return obj && typeof obj === 'object' ? obj : null;
-    } catch (e) {
-      storageOK = false;
-      return null;
-    }
+  /* ---------------- 存储层 0.7.0 ----------------
+     一条记录一个键，按条读、按条写；整份数据不再每次重写。
+     旧版（0.6.x）的单块 JSON 在第一次打开时原子搬进来，原文留一份快照。
+     IndexedDB 打不开（隐私模式、老旧浏览器）就整份退回旧方式，行为与 0.6.x 一致。 */
+
+  var UI_KEY = 'zhuolu.ui';
+  var COLLS = ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'];
+  var DB_NAME = 'zhuolu';
+  var DB_VER = 1;
+  var DB_REC = 'rec';
+  var DB_META = 'meta';
+  var SCHEMA_MARK = 1;
+
+  var store = { backend: 'ls', db: null, migrationFailed: false, quota: 0, usage: 0 };
+  var cache = null;          // 已落盘的快照，用来算差量
+  var idxDirty = {};         // 原地改过的记录：'tr|id' -> true
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+  function safeJson(v) {
+    try { return JSON.stringify(v); } catch (e) { return ''; }
   }
 
+  function reqP(req) {
+    return new Promise(function (res, rej) {
+      req.onsuccess = function () { res(req.result); };
+      req.onerror = function () { rej(req.error || new Error('idb')); };
+    });
+  }
+
+  function txDone(tx) {
+    return new Promise(function (res, rej) {
+      tx.oncomplete = function () { res(null); };
+      tx.onerror = function () { rej(tx.error || new Error('tx')); };
+      tx.onabort = function () { rej(tx.error || new Error('abort')); };
+    });
+  }
+
+  function idbOpen() {
+    return new Promise(function (res, rej) {
+      var idb = null;
+      try { idb = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.msIndexedDB; } catch (e) { idb = null; }
+      if (!idb) { rej(new Error('no-idb')); return; }
+      var req = null;
+      try { req = idb.open(DB_NAME, DB_VER); } catch (e) { rej(e); return; }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(DB_REC)) db.createObjectStore(DB_REC);
+        if (!db.objectStoreNames.contains(DB_META)) db.createObjectStore(DB_META);
+      };
+      req.onsuccess = function () { res(req.result); };
+      req.onerror = function () { rej(req.error || new Error('open')); };
+      req.onblocked = function () { rej(new Error('blocked')); };
+    });
+  }
+
+  function idbReadAll() {
+    var tx = store.db.transaction([DB_REC, DB_META], 'readonly');
+    var rs = tx.objectStore(DB_REC);
+    var ms = tx.objectStore(DB_META);
+    return Promise.all([
+      reqP(rs.getAllKeys()), reqP(rs.getAll()),
+      reqP(ms.getAllKeys()), reqP(ms.getAll())
+    ]).then(function (out) {
+      var all = { recs: [], meta: {} };
+      for (var i = 0; i < out[0].length; i++) all.recs.push({ k: String(out[0][i]), v: out[1][i] });
+      for (var j = 0; j < out[2].length; j++) all.meta[String(out[2][j])] = out[3][j];
+      return all;
+    });
+  }
+
+  // 一次保存 = 一个事务：要么全落盘，要么一条都不变
+  function idbWrite(plan) {
+    var db = store.db;
+    if (!db) return Promise.reject(new Error('no-db'));
+    var tx;
+    try { tx = db.transaction([DB_REC, DB_META], 'readwrite'); } catch (e) { return Promise.reject(e); }
+    var rs = tx.objectStore(DB_REC);
+    var ms = tx.objectStore(DB_META);
+    (plan.rec || []).forEach(function (p) { rs.put(p[1], p[0]); });
+    (plan.del || []).forEach(function (k) { rs.delete(k); });
+    (plan.meta || []).forEach(function (p) { ms.put(p[1], p[0]); });
+    (plan.mdel || []).forEach(function (k) { ms.delete(k); });
+    return txDone(tx);
+  }
+
+  function idbMetaPut(key, val) {
+    var db = store.db;
+    if (!db) return Promise.reject(new Error('no-db'));
+    var tx = db.transaction([DB_META], 'readwrite');
+    tx.objectStore(DB_META).put(val, key);
+    return txDone(tx);
+  }
+
+  function idbCount() {
+    if (!store.db) return Promise.resolve(0);
+    var tx = store.db.transaction([DB_REC], 'readonly');
+    return reqP(tx.objectStore(DB_REC).count());
+  }
+
+  function metaObj() {
+    return { v: 1, firstSeen: state.firstSeen, window: state.window, safety: state.safety, settings: state.settings };
+  }
+
+  // 把一份 state 摊成待写入的行
+  function rowsFrom(st) {
+    var plan = { rec: [], del: [], meta: [], mdel: [] };
+    COLLS.forEach(function (c) {
+      (st[c] || []).forEach(function (item) {
+        if (!item || !item.id) return;
+        plan.rec.push([c + '|' + String(item.id), safeJson(item)]);
+      });
+    });
+    var head = { v: 1, firstSeen: st.firstSeen, window: st.window, safety: st.safety, settings: st.settings };
+    plan.meta.push(['state', safeJson(head)]);
+    plan.meta.push(['daily', safeJson(st.daily || {})]);
+    return plan;
+  }
+
+  // 把行拼回一份 state。记录顺序由时间戳决定（unshift 是倒序，等价）
+  function stateFromRows(all) {
+    var head = {};
+    try { head = JSON.parse(all.meta.state || '{}') || {}; } catch (e) { head = {}; }
+    var out = { v: 1, firstSeen: head.firstSeen, window: head.window, safety: head.safety, settings: head.settings };
+    try { out.daily = JSON.parse(all.meta.daily || '{}') || {}; } catch (e) { out.daily = {}; }
+    COLLS.forEach(function (c) { out[c] = []; });
+    all.recs.forEach(function (row) {
+      var p = row.k.indexOf('|');
+      if (p < 0) return;
+      var ns = row.k.slice(0, p);
+      if (!out[ns] || ns === 'daily') return;
+      var item = null;
+      try { item = JSON.parse(row.v); } catch (e) { item = null; }
+      if (!item || typeof item !== 'object') return;
+      if (!item.id) item.id = row.k.slice(p + 1);
+      out[ns].push(item);
+    });
+    COLLS.forEach(function (c) {
+      out[c].sort(function (a, b) {
+        var ta = Number(a && a.t) || 0;
+        var tb = Number(b && b.t) || 0;
+        if (ta !== tb) return tb - ta;
+        var ia = String((a && a.id) || '');
+        var ib = String((b && b.id) || '');
+        return ia < ib ? 1 : ia > ib ? -1 : 0;
+      });
+    });
+    return normalize(out);
+  }
+
+  function buildCache() {
+    cache = { rec: {}, meta: { state: '', daily: '' } };
+    COLLS.forEach(function (c) {
+      var byKey = {};
+      (state[c] || []).forEach(function (item) {
+        if (!item || !item.id) return;
+        byKey[String(item.id)] = { ref: item, json: safeJson(item) };
+      });
+      cache.rec[c] = { byKey: byKey };
+    });
+    cache.meta.state = safeJson(metaObj());
+    cache.meta.daily = safeJson(state.daily || {});
+  }
+
+  function markRec(kind, id) {
+    idxDirty[kind + '|' + id] = true;
+  }
+
+  // 只把变了的记录拿出来。没变的集合只做指针比较，不重新序列化。
+  function buildPlanRows(force) {
+    if (!cache) buildCache();
+    var plan = { rec: [], del: [], meta: [], mdel: [] };
+    var mj = safeJson(metaObj());
+    var dj = safeJson(state.daily || {});
+    if (force || mj !== cache.meta.state) { plan.meta.push(['state', mj]); cache.meta.state = mj; }
+    if (force || dj !== cache.meta.daily) { plan.meta.push(['daily', dj]); cache.meta.daily = dj; }
+    COLLS.forEach(function (c) {
+      var prev = cache.rec[c] || { byKey: {} };
+      var next = {};
+      (state[c] || []).forEach(function (item) {
+        if (!item || !item.id) return;
+        var id = String(item.id);
+        var old = prev.byKey[id];
+        var dirty = !!idxDirty[c + '|' + id];
+        if (!force && old && old.ref === item && !dirty) { next[id] = old; return; }
+        var j = safeJson(item);
+        if (force || !old || old.json !== j) plan.rec.push([c + '|' + id, j]);
+        next[id] = { ref: item, json: j };
+      });
+      Object.keys(prev.byKey).forEach(function (id) {
+        if (!next[id]) plan.del.push(c + '|' + id);
+      });
+      cache.rec[c] = { byKey: next };
+    });
+    idxDirty = {};
+    return plan;
+  }
+
+  function planEmpty(plan) {
+    return !plan.rec.length && !plan.del.length && !plan.meta.length && !plan.mdel.length;
+  }
+
+  function writeUiHint() {
+    var v = (uiHint.theme || 'auto') + '|' + (uiHint.motion || 'auto');
+    if (uiHint.written === v) return;
+    if (lsSet(UI_KEY, v)) uiHint.written = v;
+  }
+
+  function readUiHint() {
+    var v = lsGet(UI_KEY);
+    if (!v) return;
+    var p = String(v).split('|');
+    if (p[0] === 'dark' || p[0] === 'light' || p[0] === 'auto') uiHint.theme = p[0];
+    if (p[1] === 'reduce' || p[1] === 'auto') uiHint.motion = p[1];
+    uiHint.written = v;
+  }
+
+  /* ---------------- 启动：先试 IndexedDB，不行就整份退回旧方式 ---------------- */
+
   function bootStore() {
-    var rs = readRawStore();
-    if (rs && rs.locked === true && rs.lock && rs.lock.ct && rs.lock.iv && rs.lock.salt) {
-      lock.on = true;
-      lock.unlocked = false;
-      lock.meta = rs.lock;
-      if (rs.ui) {
-        uiHint.theme = rs.ui.theme === 'dark' || rs.ui.theme === 'light' ? rs.ui.theme : 'auto';
-        uiHint.motion = rs.ui.motion === 'reduce' ? 'reduce' : 'auto';
-      }
-      return;
-    }
+    return idbOpen().then(function (db) {
+      store.db = db;
+      store.backend = 'idb';
+      return idbReadAll().then(function (all) {
+        if (all.meta.marker) { adoptMigrated(all); return null; }
+        return migrateLegacy(all);
+      });
+    }, function () {
+      store.backend = 'ls';
+      store.db = null;
+      bootLegacyStore();
+      return null;
+    }).catch(function () {
+      store.backend = 'ls';
+      store.db = null;
+      store.migrationFailed = true;
+      bootLegacyStore();
+      return null;
+    });
+  }
+
+  function adoptPlain(st) {
+    lock.on = false;
     lock.unlocked = true;
-    state = normalize(rs);
+    state = st;
     uiHint.theme = state.settings.theme || 'auto';
     uiHint.motion = state.settings.motion || 'auto';
   }
 
-  // 把加密信封写回去。salt 不变时只换 iv / ct（每次加密必须用新 iv）
-  function persistEnvelope(iv, ct, salt) {
-    var m = lock.meta || {};
-    var next = {
-      v: 1,
-      alg: 'AES-GCM-256',
-      kdf: 'PBKDF2-SHA256',
-      iter: m.iter || KDF_ITER,
-      salt: salt || m.salt || '',
-      iv: iv,
-      ct: ct,
-      autoMin: typeof m.autoMin === 'number' ? m.autoMin : 5,
-      hint: m.hint || '',
-      createdAt: m.createdAt || Date.now()
-    };
-    var env = { v: 1, locked: true, ui: { theme: themeOf(), motion: motionOf() }, lock: next };
-    lock.meta = next;
+  function adoptLocked(env) {
+    lock.on = true;
+    lock.unlocked = false;
+    lock.meta = env.lock;
+    if (env.ui) {
+      uiHint.theme = env.ui.theme === 'dark' || env.ui.theme === 'light' ? env.ui.theme : 'auto';
+      uiHint.motion = env.ui.motion === 'reduce' ? 'reduce' : 'auto';
+    }
+  }
+
+  function bootLegacyStore() {
+    var raw = lsGet(KEY);
+    var rs = null;
+    if (raw) {
+      try {
+        rs = JSON.parse(raw);
+        if (!rs || typeof rs !== 'object') { rs = null; storageOK = false; }
+      } catch (e) {
+        rs = null;
+        storageOK = false;
+      }
+    }
+    if (rs && rs.locked === true && rs.lock && rs.lock.ct && rs.lock.iv && rs.lock.salt) {
+      adoptLocked(rs);
+      return;
+    }
+    lock.unlocked = true;
+    adoptPlain(normalize(rs));
+  }
+
+  function adoptMigrated(all) {
     try {
-      localStorage.setItem(KEY, JSON.stringify(env));
+      if (all.meta.env) {
+        var env = JSON.parse(all.meta.env);
+        if (env && env.locked === true && env.lock) { adoptLocked(env); return; }
+      }
+      adoptPlain(stateFromRows(all));
+      buildCache();
+      writeUiHint();
+      reconcileLegacy();
     } catch (e) {
+      state = normalize(null);
+      cache = null;
       storageFailed();
     }
+  }
+
+  // 旧标签页可能还在往 localStorage 写；有就按 id 并进来，不丢
+  function reconcileLegacy() {
+    var raw = lsGet(KEY);
+    if (!raw) return;
+    var obj = null;
+    try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+    lsDel(KEY);
+    if (!obj || typeof obj !== 'object' || obj.locked === true) return;
+    var add = normalize(obj);
+    var changed = false;
+    COLLS.forEach(function (c) {
+      var before = (state[c] || []).length;
+      state[c] = mergeList(state[c], add[c]);
+      if (state[c].length !== before) changed = true;
+    });
+    Object.keys(add.daily || {}).forEach(function (day) {
+      if (!state.daily[day]) { state.daily[day] = add.daily[day]; changed = true; }
+    });
+    if (changed) save();
+  }
+
+  // 第一次用 0.7.0：把旧数据原子搬进 IndexedDB，原文留快照，成功后才删旧键
+  function migrateLegacy(all) {
+    var raw = lsGet(KEY);
+    var stamp = Date.now();
+
+    if (!raw) {
+      adoptPlain(normalize(null));
+      var freshPlan = rowsFrom(state);
+      freshPlan.meta.push(['marker', safeJson({ schema: SCHEMA_MARK, at: stamp, from: 'new' })]);
+      return idbWrite(freshPlan).then(function () {
+        buildCache();
+        writeUiHint();
+        return null;
+      });
+    }
+
+    var obj = null;
+    try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+    if (!obj || typeof obj !== 'object') return Promise.reject(new Error('legacy-corrupt'));
+
+    if (obj.locked === true && obj.lock && obj.lock.ct && obj.lock.iv && obj.lock.salt) {
+      var envText = safeJson(obj);
+      return idbWrite({
+        rec: [], del: [],
+        meta: [
+          ['env', envText],
+          ['marker', safeJson({ schema: SCHEMA_MARK, at: stamp, from: 'locked' })],
+          ['snapshot-v1', raw]
+        ]
+      }).then(function () {
+        adoptLocked(obj);
+        lsDel(KEY);
+        return null;
+      });
+    }
+
+    var st = normalize(obj);
+    var plan = rowsFrom(st);
+    plan.meta.push(['marker', safeJson({ schema: SCHEMA_MARK, at: stamp, from: 'v1' })]);
+    plan.meta.push(['snapshot-v1', raw]);
+    return idbWrite(plan).then(function () {
+      return idbCount();
+    }).then(function (n) {
+      if (n !== plan.rec.length) return Promise.reject(new Error('count-mismatch'));
+      adoptPlain(st);
+      buildCache();
+      writeUiHint();
+      lsDel(KEY);
+      return null;
+    });
+  }
+
+  // 加密信封：salt 不变时只换 iv / ct（每次加密必须用新 iv）
+  function envelopeObject(iv, ct, salt) {
+    var m = lock.meta || {};
+    return {
+      v: 1,
+      locked: true,
+      ui: { theme: themeOf(), motion: motionOf() },
+      lock: {
+        v: 1,
+        alg: 'AES-GCM-256',
+        kdf: 'PBKDF2-SHA256',
+        iter: m.iter || KDF_ITER,
+        salt: salt || m.salt || '',
+        iv: iv,
+        ct: ct,
+        autoMin: typeof m.autoMin === 'number' ? m.autoMin : 5,
+        hint: m.hint || '',
+        createdAt: m.createdAt || Date.now()
+      }
+    };
+  }
+
+  // 旧方式（localStorage 单块）：0.6.x 的行为，作为兜底
+  function persistEnvelope(iv, ct, salt) {
+    var env = envelopeObject(iv, ct, salt);
+    lock.meta = env.lock;
+    if (!lsSet(KEY, JSON.stringify(env))) storageFailed();
+  }
+
+  // 新方式：信封整块存进 IndexedDB 的 meta
+  function writeEnvelope(iv, ct, salt) {
+    var env = envelopeObject(iv, ct, salt);
+    lock.meta = env.lock;
+    if (store.backend !== 'idb') {
+      if (!lsSet(KEY, JSON.stringify(env))) storageFailed();
+      return Promise.resolve(null);
+    }
+    return idbMetaPut('env', safeJson(env)).catch(function () { storageFailed(); });
   }
 
   function save() {
     if (!storageOK) { storageFailed(); return; }
     if (!state) return;                              // 还没解锁：一个字节都不写
-    var text;
-    try { text = JSON.stringify(state); } catch (e) { storageFailed(); return; }
     uiHint.theme = state.settings.theme || 'auto';
     uiHint.motion = state.settings.motion || 'auto';
+    writeUiHint();
+    if (store.backend !== 'idb') { saveLegacy(); return; }
+    if (lock.on) { saveLocked(); return; }
+    saveRows();
+  }
+
+  // 兜底：整份 JSON 写 localStorage（0.6.x 的老路）
+  function saveLegacy() {
+    var text;
+    try { text = JSON.stringify(state); } catch (e) { storageFailed(); return; }
     if (!lock.on) {
-      try { localStorage.setItem(KEY, text); } catch (e) { storageFailed(); }
+      if (!lsSet(KEY, text)) storageFailed();
       return;
     }
     if (!cryptoOK) { storageFailed(); return; }
@@ -276,11 +644,36 @@
     }).catch(function () { storageFailed(); });
   }
 
+  // 锁定状态：整份加密成一个信封（锁本来就只能整块加密）
+  function saveLocked() {
+    if (!cryptoOK) { storageFailed(); return; }
+    var text;
+    try { text = JSON.stringify(state); } catch (e) { storageFailed(); return; }
+    var seq = ++saveSeq;
+    saveChain = saveChain.then(function () {
+      var key = lock.key;
+      if (!key) return null;
+      return encryptText(key, text).then(function (out) {
+        if (seq !== saveSeq) return null;
+        return writeEnvelope(out.iv, out.ct, null);
+      });
+    }).catch(function () { storageFailed(); });
+  }
+
+  // 明文状态：只写变了的记录，一次一个事务
+  function saveRows() {
+    if (!store.db) { storageFailed(); return; }
+    var plan = buildPlanRows(false);
+    if (planEmpty(plan)) return;
+    saveChain = saveChain.then(function () {
+      return idbWrite(plan).catch(function () { return idbWrite(plan); });
+    }).catch(function () { storageFailed(); });
+    return saveChain;
+  }
+
   function savePending() {
     return saveChain.then(function () { return null; }, function () { return null; });
   }
-
-  bootStore();
 
   /* ---------------- 主题 / 动效 ---------------- */
 
@@ -451,12 +844,27 @@
     var salt = b64FromBytes(randBytes(16));
     return deriveKey(pass, salt, KDF_ITER).then(function (key) {
       return encryptText(key, JSON.stringify(state)).then(function (out) {
-        lock.on = true;
-        lock.unlocked = true;
-        lock.key = key;
-        lock.meta = null;
-        persistEnvelope(out.iv, out.ct, salt);
-        return null;
+        var env = envelopeObject(out.iv, out.ct, salt);
+        var done = function () {
+          lock.on = true;
+          lock.unlocked = true;
+          lock.key = key;
+          lock.meta = env.lock;
+          cache = null;
+          saveChain = Promise.resolve();
+          return null;
+        };
+        if (store.backend !== 'idb') {
+          if (!lsSet(KEY, JSON.stringify(env))) return '写不进去，先导出一份备份。';
+          return done();
+        }
+        // 上锁之后明文不能再留在盘上：同一事务里删掉所有行和升级前的快照
+        var tx = store.db.transaction([DB_REC, DB_META], 'readwrite');
+        tx.objectStore(DB_REC).clear();
+        var ms = tx.objectStore(DB_META);
+        ['state', 'daily', 'snapshot-v1'].forEach(function (k) { ms.delete(k); });
+        ms.put(safeJson(env), 'env');
+        return txDone(tx).then(done);
       });
     }).catch(function () { return '这台设备上的浏览器没能完成加密。'; });
   }
@@ -466,18 +874,24 @@
     return deriveKey(pass, salt, KDF_ITER).then(function (key) {
       return encryptText(key, JSON.stringify(state)).then(function (out) {
         lock.key = key;
-        persistEnvelope(out.iv, out.ct, salt);
-        return null;
+        return writeEnvelope(out.iv, out.ct, salt).then(function () { return null; });
       });
     }).catch(function () { return '改口令没成功，原来的口令还能用。'; });
   }
 
   function disableLock() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      return '写不进去，先导出一份备份。';
+    if (store.backend !== 'idb') {
+      if (!lsSet(KEY, JSON.stringify(state))) return '写不进去，先导出一份备份。';
+      return finishUnlockOff();
     }
+    if (!store.db) return '写不进去，先导出一份备份。';
+    cache = null;
+    var plan = buildPlanRows(true);      // 全量摊成行
+    plan.mdel = ['env'];
+    return idbWrite(plan).then(finishUnlockOff, function () { return '写不进去，先导出一份备份。'; });
+  }
+
+  function finishUnlockOff() {
     lock.on = false;
     lock.key = null;
     lock.unlocked = true;
@@ -550,7 +964,14 @@
   function lockForgot() {
     if (!confirm('忘记口令，就打不开本机的这些记录——这台设备上只有加密后的密文，没有任何地方存着原口令。\n\n如果你在别处存过备份，可以清空本机数据，重新打开后把备份导进来。')) return;
     if (!confirm('最后确认：删除这台设备上的全部数据？这个动作不能撤销。')) return;
-    try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+    if (store.backend === 'idb' && store.db) {
+      var tx = store.db.transaction([DB_REC, DB_META], 'readwrite');
+      tx.objectStore(DB_REC).clear();
+      tx.objectStore(DB_META).clear();
+      txDone(tx).then(function () { location.reload(); }, function () { location.reload(); });
+      return;
+    }
+    lsDel(KEY);
     location.reload();
   }
 
@@ -573,7 +994,7 @@
     min = Math.max(0, Math.min(120, Number(min) || 0));
     if (!lock.on || !lock.meta) return;
     lock.meta.autoMin = min;
-    persistEnvelope(lock.meta.iv, lock.meta.ct, lock.meta.salt);
+    writeEnvelope(lock.meta.iv, lock.meta.ct, lock.meta.salt);
     lastActive = Date.now();
   }
 
@@ -1029,6 +1450,7 @@
   }
 
   function fmtBytes(b) {
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB';
     if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
     if (b >= 1024) return Math.round(b / 1024) + ' KB';
     return b + ' B';
@@ -1039,13 +1461,32 @@
     var parts = [];
     if (!storageOK) parts.push('当前浏览器不允许本地存储：记录只在本次打开有效，请立即导出');
     else if (persistNote) parts.push(persistNote);
-    if (bytes > 0) parts.push('本机数据约 ' + fmtBytes(bytes) + ' / 浏览器上限约 5 MB');
-    if (bytes > 4194304) parts.push('空间快满了，建议导出后清理旧记录。');
-    setStorageNote(parts.join(' · '));
-    if (bytes > 4194304 && !quotaWarned) {
-      quotaWarned = true;
-      showToast('本地存储快满了，先导出一份备份。');
+    if (store.backend === 'idb') {
+      if (bytes > 0) parts.push('本机数据约 ' + fmtBytes(bytes));
+      if (store.quota > 0) parts.push('浏览器已占 ' + fmtBytes(store.usage) + ' / 上限 ' + fmtBytes(store.quota));
+    } else {
+      if (store.migrationFailed) parts.push('新版存储没能启用，仍按旧方式保存，记录不会丢');
+      if (bytes > 0) parts.push('本机数据约 ' + fmtBytes(bytes) + ' / 浏览器上限约 5 MB');
+      if (bytes > 4194304) parts.push('空间快满了，建议导出后清理旧记录。');
+      if (bytes > 4194304 && !quotaWarned) {
+        quotaWarned = true;
+        showToast('本地存储快满了，先导出一份备份。');
+      }
     }
+    setStorageNote(parts.join(' · '));
+  }
+
+  // 浏览器给这个站点多少空间：只用于显示，取不到就不显示
+  function updateQuotaNote() {
+    try {
+      if (!(navigator.storage && navigator.storage.estimate)) return;
+      navigator.storage.estimate().then(function (est) {
+        if (!est || !est.quota) return;
+        store.quota = Number(est.quota) || 0;
+        store.usage = Number(est.usage) || 0;
+        refreshStorageNote();
+      }, function () { /* ignore */ });
+    } catch (e) { /* ignore */ }
   }
 
   /* ---------------- 担忧窗口 ---------------- */
@@ -2648,6 +3089,7 @@
     }
     Object.keys(next).forEach(function (key) { item[key] = next[key]; });
     item.editedAt = Date.now();
+    markRec(editState.kind, editState.id);   // 原地改的记录，分条存储要单独标出来
     save();
     closeEdit();
     renderAll();
@@ -3705,14 +4147,20 @@
 
   var booted = false;
 
+  function hideSplash() {
+    var el = document.getElementById('boot-splash');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
   function bootApp() {
-    if (booted) { renderAll(); return; }
+    if (booted) { renderAll(); hideSplash(); return; }
     booted = true;
     applyTheme();
     initRanges();
     renderAll();
     updateInstallUI();
     requestPersist();
+    updateQuotaNote();
     if (!location.hash) {
       location.replace('#/now');
     } else {
@@ -3723,9 +4171,21 @@
     }
     setInterval(updateWindowTimer, 1000);
     startIdleWatch();
+    hideSplash();
+  }
+
+  // 存储是异步打开的（IndexedDB），打开之前不渲染任何东西
+  function finishBoot() {
+    if (!lock.unlocked) {
+      hideSplash();
+      showLock();
+      return;
+    }
+    bootApp();
   }
 
   function init() {
+    readUiHint();
     applyTheme();
     var toastBtn = $('#toast-action');
     if (toastBtn) {
@@ -3754,11 +4214,7 @@
       lockForm.addEventListener('submit', function (e) { e.preventDefault(); tryUnlock(); });
     }
     initSW();
-    if (!lock.unlocked) {
-      showLock();
-      return;
-    }
-    bootApp();
+    bootStore().then(finishBoot, finishBoot);
   }
 
   if (document.readyState === 'loading') {

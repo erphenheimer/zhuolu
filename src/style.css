@@ -2032,3 +2032,39 @@ mark {
   .sp-view__block li { font-size: 13.5px; }
 }
 
+/* ============ 0.7.0 · 启动遮罩 ============ */
+/* 存储改成异步打开（IndexedDB），打开之前不把空壳露出来 */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  color: var(--ink-2);
+}
+.boot__mark {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+}
+.boot__mark::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .45;
+  animation: boot-pulse 1.8s ease-in-out infinite;
+}
+.boot__text { font-size: 12.5px; letter-spacing: .14em; color: var(--muted); }
+@keyframes boot-pulse {
+  0%, 100% { opacity: .16; transform: scale(.82); }
+  50% { opacity: .6; transform: scale(1); }
+}
+html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }

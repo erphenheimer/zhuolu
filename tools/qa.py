@@ -22,7 +22,7 @@ import time
 import traceback
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
@@ -58,6 +58,8 @@ IOS_UA = (
 )
 MOBILE = {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True}
 FENCE = chr(96) * 3
+# 担忧窗口测试要用一个「离现在足够远」的时间：离得太近会撞上正在开着的窗口
+WIN_TIME = (datetime.now() + timedelta(hours=3)).strftime("%H:%M")
 
 
 # ---------------------------------------------------------------- 工具函数
@@ -146,12 +148,146 @@ def nav(page, route):
     visible(page, ".view[data-view='%s'].is-active" % route)
 
 
-def app_state(page):
-    return page.evaluate(
-        "() => { const raw = localStorage.getItem('zhuolu.v1');"
-        " return raw ? JSON.parse(raw) : null; }"
-    )
+# 0.7.0 起主存储是 IndexedDB；测试同样要按真实存储读，不能只读 localStorage
+JS_IDB = """
+const qaOpen = () => new Promise((res, rej) => {
+  const r = indexedDB.open('zhuolu', 1);
+  r.onupgradeneeded = () => {
+    const d = r.result;
+    if (!d.objectStoreNames.contains('rec')) d.createObjectStore('rec');
+    if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+  };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error || new Error('open'));
+});
+const qaReq = (req) => new Promise((res, rej) => {
+  req.onsuccess = () => res(req.result);
+  req.onerror = () => rej(req.error || new Error('req'));
+});
+"""
 
+JS_STATE = """async () => {
+  const legacy = localStorage.getItem('zhuolu.v1');
+  if (legacy) { try { return JSON.parse(legacy); } catch (e) {} }
+""" + JS_IDB + """
+  const db = await qaOpen();
+  if (!db.objectStoreNames.contains('meta')) { db.close(); return null; }
+  const tx = db.transaction(['rec', 'meta'], 'readonly');
+  const rs = tx.objectStore('rec');
+  const ms = tx.objectStore('meta');
+  const got = await Promise.all([
+    qaReq(rs.getAllKeys()), qaReq(rs.getAll()),
+    qaReq(ms.getAllKeys()), qaReq(ms.getAll())
+  ]);
+  const meta = {};
+  got[2].forEach((k, i) => { meta[String(k)] = got[3][i]; });
+  const head = JSON.parse(meta.state || '{}');
+  const st = Object.assign({ v: 1, firstSeen: 0, daily: {}, sos: [], rum: [], cert: [], tr: [], sleep: [], parked: [] }, head);
+  st.daily = JSON.parse(meta.daily || '{}');
+  got[0].forEach((k, i) => {
+    const key = String(k);
+    const p = key.indexOf('|');
+    if (p < 0) return;
+    const ns = key.slice(0, p);
+    if (!st[ns] || ns === 'daily') return;
+    st[ns].push(JSON.parse(got[1][i]));
+  });
+  st.__locked = !!meta.env;
+  st.__marker = meta.marker ? JSON.parse(meta.marker) : null;
+  st.__snapshot = meta['snapshot-v1'] || null;
+  st.__keys = got[0].map(String);
+  db.close();
+  return st;
+}"""
+
+JS_SEED = """async (state) => {
+""" + JS_IDB + """
+  const db = await qaOpen();
+  const tx = db.transaction(['rec', 'meta'], 'readwrite');
+  const rs = tx.objectStore('rec');
+  const ms = tx.objectStore('meta');
+  rs.clear();
+  ms.clear();
+  ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach((c) => {
+    (state[c] || []).forEach((it) => {
+      if (it && it.id) rs.put(JSON.stringify(it), c + '|' + it.id);
+    });
+  });
+  ms.put(JSON.stringify({
+    v: 1,
+    firstSeen: state.firstSeen || Date.now(),
+    window: state.window || null,
+    safety: state.safety || null,
+    settings: state.settings || null
+  }), 'state');
+  ms.put(JSON.stringify(state.daily || {}), 'daily');
+  ms.put(JSON.stringify({ schema: 1, at: Date.now(), from: 'qa' }), 'marker');
+  await new Promise((res, rej) => {
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+  db.close();
+  localStorage.removeItem('zhuolu.v1');
+  localStorage.removeItem('zhuolu.ui');
+  return true;
+}"""
+
+JS_ENV = """async () => {
+  const legacy = localStorage.getItem('zhuolu.v1');
+  if (legacy) { try { const o = JSON.parse(legacy); if (o && o.locked) return legacy; } catch (e) {} }
+""" + JS_IDB + """
+  const db = await qaOpen();
+  if (!db.objectStoreNames.contains('meta')) { db.close(); return null; }
+  const tx = db.transaction(['meta'], 'readonly');
+  const v = await qaReq(tx.objectStore('meta').get('env'));
+  db.close();
+  return v || null;
+}"""
+
+JS_DUMP = """async () => {
+""" + JS_IDB + """
+  const db = await qaOpen();
+  if (!db.objectStoreNames.contains('meta')) { db.close(); return ''; }
+  const tx = db.transaction(['rec', 'meta'], 'readonly');
+  const got = await Promise.all([
+    qaReq(tx.objectStore('rec').getAll()), qaReq(tx.objectStore('meta').getAll())
+  ]);
+  db.close();
+  return JSON.stringify(got);
+}"""
+
+
+def app_state(page):
+    return page.evaluate(JS_STATE)
+
+
+def seed_state(page, state):
+    page.evaluate(JS_SEED, state)
+
+
+def lock_env_raw(page):
+    return page.evaluate(JS_ENV)
+
+
+def idb_dump(page):
+    return page.evaluate(JS_DUMP)
+
+
+def wait_state(page, pred, timeout=8.0):
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        try:
+            last = app_state(page)
+        except Exception:
+            last = None
+        try:
+            if last is not None and pred(last):
+                return last
+        except Exception:
+            pass
+        page.wait_for_timeout(80)
+    raise AssertionError("等待存储状态超时: %r" % (last,))
 
 def set_range(page, selector, value):
     page.eval_on_selector(
@@ -851,17 +987,15 @@ def _park_save(page):
         timeout=8000,
     )
     return "盒子 1 条，提示文案已更新"
-
-
 def _window_time(page):
     page.click("[data-action='toggle-window-edit']")
     visible(page, "#window-edit")
-    page.fill("#window-time-input", "20:15")
+    page.fill("#window-time-input", WIN_TIME)
     page.click("[data-action='save-window']")
-    wait_text(page, "#window-time", "20:15")
+    wait_text(page, "#window-time", WIN_TIME)
     state = app_state(page)
-    assert state["window"]["time"] == "20:15", "window.time 未保存: %s" % state["window"]
-    return "担忧窗口时间保存为 20:15"
+    assert state["window"]["time"] == WIN_TIME, "window.time 未保存: %s" % state["window"]
+    return "担忧窗口时间保存为 %s" % WIN_TIME
 
 
 def _window_open_close(page):
@@ -873,18 +1007,18 @@ def _window_open_close(page):
     hidden(page, "#window-timer")
     status = page.inner_text("#window-status")
     assert "未到时间" in status, "关闭后状态异常: %s" % status
-    assert "20:15" in status, "关闭后未显示窗口时间"
+    assert WIN_TIME in status, "关闭后未显示窗口时间"
     return "开窗倒计时 %s，关窗后状态=未到时间" % countdown
 
 
 def _rum_persisted(page):
     page.reload(wait_until="domcontentloaded")
     visible(page, ".view[data-view='rumination'].is-active")
-    assert page.inner_text("#window-time") == "20:15", "刷新后窗口时间丢失"
+    assert page.inner_text("#window-time") == WIN_TIME, "刷新后窗口时间丢失"
     wait_text(page, "#parked-hint", "1 个念头")
     state = app_state(page)
     assert len(state["rum"]) == 1 and len(state["parked"]) == 1, "刷新后记录数量异常"
-    return "刷新后 rum=1、parked=1、窗口时间=20:15"
+    return "刷新后 rum=1、parked=1、窗口时间=%s" % WIN_TIME
 
 
 # ---------------------------------------------------------------- D 确定性
@@ -1223,10 +1357,7 @@ def _more_motion(page):
     )
     assert app_state(page)["settings"]["motion"] == "reduce", "减少动效未写入存储"
     page.select_option("#setting-motion", "auto")
-    page.wait_for_function(
-        "() => localStorage.getItem('zhuolu.v1') &&"
-        " JSON.parse(localStorage.getItem('zhuolu.v1')).settings.motion === 'auto'"
-    )
+    wait_state(page, lambda s: s["settings"]["motion"] == "auto")
     return "data-motion=reduce 生效，auto 已写回存储"
 
 
@@ -1417,9 +1548,7 @@ def _seed_export_state(page):
             "lastExportAt": 0,
         },
     }
-    page.evaluate(
-        "s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", state
-    )
+    seed_state(page, state)
     page.reload(wait_until="domcontentloaded")
     visible(page, ".view[data-view='more'].is-active")
     nav(page, "certainty")
@@ -1673,7 +1802,7 @@ def _import_overwrite(page, fixture):
             "lastExportAt": 0,
         },
     }
-    page.evaluate("s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", local)
+    seed_state(page, local)
     page.reload(wait_until="domcontentloaded")
     visible(page, ".view[data-view='more'].is-active")
     assert app_state(page)["rum"][0]["id"] == "local-rum", "本地种子记录未写入"
@@ -2108,10 +2237,7 @@ def _qe_settings(page):
     visible(page, "#setting-quick-url")
     page.fill("#setting-quick-url", "https://example.com/plain")
     page.press("#setting-quick-url", "Tab")
-    page.wait_for_function(
-        "() => { const s = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
-        " return s.settings && s.settings.quickExit === 'custom'; }"
-    )
+    wait_state(page, lambda s: s["settings"].get("quickExit") == "custom")
     state = app_state(page)
     assert state["settings"]["quickExitUrl"] == "https://example.com/plain", "自定义网址没存下"
     return "默认 search → 自定义 %s" % state["settings"]["quickExitUrl"]
@@ -2130,11 +2256,7 @@ def _qe_go(page):
 
 
 def _lock_seed(page):
-    page.evaluate(
-        "(t) => localStorage.setItem('zhuolu.v1', JSON.stringify({"
-        "v: 1, rum: [{ id: 'qa-lock-1', t: Date.now(), kind: 'why', thought: t }] }))",
-        SEED_TEXT,
-    )
+    seed_state(page, {"v": 1, "rum": [{"id": "qa-lock-1", "t": now_ms(), "kind": "why", "thought": SEED_TEXT}]})
     page.reload(wait_until="domcontentloaded")
     wait_text(page, "#rec-rum", SEED_TEXT)
 
@@ -2159,12 +2281,14 @@ def _lock_on(page):
     page.fill("#pass-new2", LOCK_PASS)
     page.click("#pass-submit")
     hidden(page, "#pass-overlay")
-    page.wait_for_function(
-        "() => { const e = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
-        " return e.locked === true && e.lock && !!e.lock.ct; }"
-    )
-    raw = page.evaluate("() => localStorage.getItem('zhuolu.v1')")
+    wait_state(page, lambda s: s.get("__locked") is True)
+    raw = lock_env_raw(page)
+    assert raw, "没有找到加密信封"
     assert SEED_TEXT not in raw, "加密后本地仍有明文记录"
+    dump = idb_dump(page)
+    assert SEED_TEXT not in dump, "加密后 IndexedDB 里仍有明文记录"
+    locked_state = app_state(page)
+    assert locked_state["__keys"] == [], "上锁后分条存储里还剩明文行: %s" % locked_state["__keys"]
     env = json.loads(raw)
     assert sorted(env.keys()) == ["lock", "locked", "ui", "v"], "信封字段异常: %s" % sorted(env.keys())
     assert env["lock"]["alg"] == "AES-GCM-256", "算法不对: %s" % env["lock"]["alg"]
@@ -2238,10 +2362,8 @@ def _lock_off(page):
     page.fill("#pass-cur", LOCK_PASS2)
     page.click("#pass-submit")
     hidden(page, "#pass-overlay")
-    page.wait_for_function(
-        "() => { const s = JSON.parse(localStorage.getItem('zhuolu.v1') || '{}');"
-        " return s.locked !== true && Array.isArray(s.rum); }"
-    )
+    plain_state = wait_state(page, lambda s: s.get("__locked") is False and isinstance(s.get("rum"), list))
+    assert plain_state["__keys"], "关锁后没有把记录写回分条存储"
     page.reload(wait_until="domcontentloaded")
     page.wait_for_timeout(400)
     assert page.locator("#lock-overlay").is_hidden(), "关锁后不该再出现锁屏"
@@ -2251,11 +2373,7 @@ def _lock_off(page):
 
 
 def _enc_export(page, holder):
-    page.evaluate(
-        "(t) => localStorage.setItem('zhuolu.v1', JSON.stringify({"
-        "v: 1, rum: [{ id: 'qa-enc-1', t: Date.now(), kind: 'why', thought: t }] }))",
-        SEED_TEXT,
-    )
+    seed_state(page, {"v": 1, "rum": [{"id": "qa-enc-1", "t": now_ms(), "kind": "why", "thought": SEED_TEXT}]})
     page.reload(wait_until="domcontentloaded")
     wait_text(page, "#rec-rum", SEED_TEXT)
     page.click("[data-action='export-enc']")
@@ -2461,7 +2579,7 @@ def _seed_records(page):
         "window": {"time": "19:30", "minutes": 15, "openedAt": 0, "closedDay": ""},
         "settings": {"theme": "light", "motion": "auto", "support": ["", ""], "lastExportAt": 0},
     }
-    page.evaluate("s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", state)
+    seed_state(page, state)
     page.reload(wait_until="domcontentloaded")
     visible(page, ".view[data-view='more'].is-active")
     total = page.eval_on_selector_all(
@@ -2508,10 +2626,11 @@ def _edit_required(page):
     except Exception:
         info = page.evaluate(
             "() => ({ open: !document.getElementById('edit-overlay').hasAttribute('hidden'),"
-            " errHidden: document.getElementById('edit-err').hasAttribute('hidden'),"
-            " rum: (JSON.parse(localStorage.getItem('zhuolu.v1')).rum||[]).map(r => r.thought),"
-            " tr: (JSON.parse(localStorage.getItem('zhuolu.v1')).tr||[]).map(r => r.thought) })"
+            " errHidden: document.getElementById('edit-err').hasAttribute('hidden') })"
         )
+        stored = app_state(page) or {}
+        info["rum"] = [r.get("thought") for r in stored.get("rum", [])]
+        info["tr"] = [r.get("thought") for r in stored.get("tr", [])]
         raise AssertionError(
             "保存后没出现校验提示｜kicker=%s｜typed=%r｜%s" % (kicker, typed, info)
         )
@@ -2753,7 +2872,7 @@ def _seed_windows(page):
         "window": {"time": "19:30", "minutes": 15, "openedAt": 0, "closedDay": ""},
         "settings": {"theme": "light", "motion": "auto", "support": ["", ""], "lastExportAt": 0},
     }
-    page.evaluate("s => localStorage.setItem('zhuolu.v1', JSON.stringify(s))", state)
+    seed_state(page, state)
     page.reload(wait_until="domcontentloaded")
     nav(page, "review")
 
@@ -2895,6 +3014,145 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+# ---------------------------------------------------------------- 0.7.0 存储迁移
+
+
+MIG_STATE = {
+    "v": 1,
+    "firstSeen": 1700000000000,
+    "sos": [{"id": "mig-sos-1", "t": 1700000000000, "before": 8, "after": 4, "need": ["被抱一下"]}],
+    "rum": [
+        {"id": "mig-rum-1", "t": 1700000001000, "kind": "why", "thought": "迁移念头甲"},
+        {"id": "mig-rum-2", "t": 1700000002000, "kind": "if", "thought": "迁移念头乙"},
+    ],
+    "cert": [],
+    "tr": [],
+    "sleep": [],
+    "parked": [],
+    "daily": {"2026-11-01": {"sleep": True, "eat": False, "move": False, "connect": False, "push": True}},
+    "window": {"time": "20:15", "minutes": 25, "openedAt": 0, "closedDay": ""},
+    "settings": {"theme": "dark", "motion": "reduce", "support": ["甲", "乙"], "lastExportAt": 12345},
+}
+
+
+def _boot_with_legacy(run, extra_script=""):
+    """在页面脚本跑之前就写好旧键，模拟真正的“第一次打开 0.7.0”。"""
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.page
+    page.add_init_script(
+        "localStorage.setItem('zhuolu.v1', %s);" % json.dumps(json.dumps(MIG_STATE))
+        + ("\n" + extra_script if extra_script else "")
+    )
+    page.goto(run.index_url, wait_until="domcontentloaded")
+    page.wait_for_selector("#boot-splash", state="detached", timeout=15000)
+    return session, page
+
+
+def _store_migrate(run):
+    session, page = _boot_with_legacy(run)
+    try:
+        state = app_state(page)
+        assert state and len(state.get("rum", [])) == 2, "迁移后 rum 不是 2 条: %r" % (state or {}).get("rum")
+        ids = sorted(r["id"] for r in state["rum"])
+        assert ids == ["mig-rum-1", "mig-rum-2"], "记录 id 变了: %s" % ids
+        assert state["settings"]["theme"] == "dark", "设置没跟着迁移"
+        assert state["window"]["time"] == "20:15", "担忧窗口没跟着迁移"
+        assert state["daily"]["2026-11-01"]["push"] is True, "打卡没跟着迁移"
+        assert state["__marker"], "缺少迁移标记，下次会重跑"
+        nav(page, "more")
+        wait_text(page, "#rec-rum", "迁移念头甲")
+        assert "迁移念头乙" in page.inner_text("#rec-rum"), "第二条记录没进列表"
+        return "2 条反刍 + 1 条着陆 + 打卡 + 设置全部搬家成功"
+    finally:
+        session.close()
+
+
+def _store_marker(run):
+    session, page = _boot_with_legacy(run)
+    try:
+        raw = page.evaluate("() => localStorage.getItem('zhuolu.v1')")
+        assert raw is None, "迁移成功后旧键应该清掉，现在还有 %s 字节" % (len(raw) if raw else 0)
+        state = app_state(page)
+        assert state["__snapshot"], "没留升级前的快照"
+        snap = json.loads(state["__snapshot"])
+        assert len(snap["rum"]) == 2, "快照内容不对"
+        keys = state["__keys"]
+        assert sorted(keys) == ["rum|mig-rum-1", "rum|mig-rum-2", "sos|mig-sos-1"], "记录键不对: %s" % keys
+        assert page.evaluate("() => !!localStorage.getItem('zhuolu.ui')"), "主题提示没写进 localStorage"
+        return "旧键已删；快照留底；3 条记录 = 3 个键"
+    finally:
+        session.close()
+
+
+def _store_rows(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("rumination")
+    try:
+        for text in ("分条甲", "分条乙"):
+            page.click("[data-action='start-intercept']")
+            visible(page, "#intercept-overlay")
+            page.fill("#it-thought", text)
+            page.click("#it-kinds [data-kind='why']")
+            page.click("[data-action='it-next']")
+            visible(page, "[data-it-step='2'].is-on")
+            page.fill("#it-action", "先不处理")
+            page.click("[data-action='it-save']")
+            visible(page, "[data-it-step='3'].is-on")
+            page.click("[data-it-step='3'] [data-action='close-intercept']")
+            hidden(page, "#intercept-overlay")
+        state = app_state(page)
+        keys = state["__keys"]
+        assert len(keys) == 2, "两条记录应该是两个键，实际 %s" % keys
+        assert all(k.startswith("rum|") for k in keys), "键名前缀不对: %s" % keys
+        assert state["__snapshot"] is None, "新装用户不该有快照"
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector("#boot-splash", state="detached", timeout=15000)
+        again = app_state(page)
+        assert len(again["rum"]) == 2, "刷新后条数不对: %d" % len(again["rum"])
+        assert sorted(r["thought"] for r in again["rum"]) == ["分条乙", "分条甲"], "刷新后内容不对"
+        return "2 条记录 = 2 个独立键，刷新后顺序与内容都在"
+    finally:
+        session.close()
+
+
+def _store_fallback(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.page
+    page.add_init_script("try { Object.defineProperty(window, 'indexedDB', { get: function () { return undefined; } }); } catch (e) {}")
+    page.goto(run.index_url, wait_until="domcontentloaded")
+    page.wait_for_selector("#boot-splash", state="detached", timeout=15000)
+    try:
+        nav(page, "rumination")
+        page.click("[data-action='start-intercept']")
+        visible(page, "#intercept-overlay")
+        page.fill("#it-thought", "没有数据库也要能存")
+        page.click("#it-kinds [data-kind='why']")
+        page.click("[data-action='it-next']")
+        visible(page, "[data-it-step='2'].is-on")
+        page.fill("#it-action", "先记下来")
+        page.click("[data-action='it-save']")
+        visible(page, "[data-it-step='3'].is-on")
+        page.click("[data-it-step='3'] [data-action='close-intercept']")
+        hidden(page, "#intercept-overlay")
+        wait_state(page, lambda s: len(s.get("rum", [])) == 1)
+        raw = page.evaluate("() => localStorage.getItem('zhuolu.v1')")
+        assert raw and "没有数据库也要能存" in raw, "退回旧方式后没写进 localStorage"
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_selector("#boot-splash", state="detached", timeout=15000)
+        nav(page, "more")
+        wait_text(page, "#rec-rum", "没有数据库也要能存")
+        return "IndexedDB 不可用时整份退回 localStorage，读写都正常"
+    finally:
+        session.close()
+
+
+def group_storage(run):
+    run.check("0.7.0 存储", "旧数据第一次打开就搬进 IndexedDB", lambda: _store_migrate(run), None)
+    run.check("0.7.0 存储", "迁移后清旧键、留快照、一条一个键", lambda: _store_marker(run), None)
+    run.check("0.7.0 存储", "新记录一条一个键（不是一个大 blob）", lambda: _store_rows(run), None)
+    run.check("0.7.0 存储", "没有 IndexedDB 时整份退回旧方式", lambda: _store_fallback(run), None)
+
+
 GROUPS = [
     ("加载与结构", group_smoke),
     ("SOS 着陆", group_sos),
@@ -2907,6 +3165,7 @@ GROUPS = [
     ("iPhone UA", group_ios),
     ("PWA / 离线", group_pwa),
     ("隐私与安全", group_privacy),
+    ("0.7.0 存储", group_storage),
     ("记录与小结", group_records),
     ("全局汇总", group_global),
 ]
