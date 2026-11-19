@@ -530,10 +530,12 @@
           <button class="btn btn--ghost btn--sm" data-action="export-json">导出 JSON</button>
           <button class="btn btn--ghost btn--sm" data-action="export-md">导出 Markdown</button>
           <button class="btn btn--ghost btn--sm" data-action="import-json">导入 JSON</button>
+          <button class="btn btn--ghost btn--sm" data-action="verify-backup">检查一份备份</button>
           <button class="btn btn--ghost btn--sm" data-action="print-pocket">打印口袋卡</button>
           <button class="btn btn--danger btn--sm" data-action="clear-all">清空所有数据</button>
         </div>
         <p class="small muted mt-12" id="export-note"></p>
+        <p class="small muted mt-8" id="import-note" hidden></p>
         <p class="small muted mt-8" id="storage-note"></p>
         <div class="divider"></div>
         <div class="support-row">
@@ -592,7 +594,7 @@
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（IndexedDB），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.8.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.9.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -942,6 +944,28 @@
         <button class="btn btn--primary" data-action="import-merge">合并</button>
         <button class="btn btn--ghost" data-action="import-overwrite">覆盖当前数据</button>
         <button class="btn btn--ghost" data-action="close-import">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 检查备份浮层 ============ -->
+<div class="overlay" id="verify-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="verify-title">
+  <div class="panel">
+    <div class="panel__head">
+      <div><span class="panel__kicker">检查备份</span></div>
+      <button class="panel__close" data-action="close-verify" aria-label="关闭检查">×</button>
+    </div>
+    <div class="panel__body">
+      <h2 class="h2" id="verify-title">这份备份是好的吗</h2>
+      <p class="small muted import-file" id="verify-file"></p>
+      <p class="small import-ok" id="verify-verdict" hidden></p>
+      <div class="import-counts" id="verify-counts"></div>
+      <p class="small muted mt-8" id="verify-note"></p>
+      <p class="small muted mt-12">检查只读文件，不动本机数据。文件里带清单的，会核对每类条数与内容指纹；旧备份没有清单，只能数条数。</p>
+      <div class="step-actions">
+        <button class="btn btn--primary" data-action="verify-import" id="verify-import-btn">导入这份</button>
+        <button class="btn btn--ghost" data-action="close-verify">关闭</button>
       </div>
     </div>
   </div>

@@ -323,6 +323,18 @@ def download_with(page, action):
     return download.suggested_filename, text
 
 
+def fill_field(page, selector, value):
+    """填一格并核对真的填进去了：编辑浮层偶尔会被二次渲染，只填一次可能被盖回原值。"""
+    last = None
+    for _ in range(4):
+        page.fill(selector, value)
+        last = page.input_value(selector)
+        if last == value:
+            return last
+        page.wait_for_timeout(80)
+    raise AssertionError("%s 没填进去：期望 %r，实际 %r" % (selector, value, last))
+
+
 def choose_import(page, file_path):
     with page.expect_file_chooser(timeout=15000) as chooser:
         page.click("[data-action='import-json']")
@@ -1686,9 +1698,10 @@ def _export_structure(run, holder):
     assert holder.get("text"), "未取得导出内容"
     payload = json.loads(holder["text"])
     holder["payload"] = payload
-    expected = {"app", "schemaVersion", "appVersion", "exportedAt", "data"}
+    expected = {"app", "format", "schemaVersion", "appVersion", "exportedAt", "manifest", "data"}
     assert set(payload.keys()) == expected, "顶层字段异常: %s" % sorted(payload.keys())
     assert payload["app"] == "zhuolu", "app 不是 zhuolu"
+    assert payload["format"] == 1, "format 不是 1"
     assert payload["schemaVersion"] == 1, "schemaVersion 不是 1"
     assert re.match(r"^\d+\.\d+\.\d+$", str(payload["appVersion"])), (
         "appVersion 格式异常: %s" % payload["appVersion"]
@@ -1704,7 +1717,15 @@ def _export_structure(run, holder):
         raise AssertionError("exportedAt 不是 ISO 时间: %s" % payload["exportedAt"]) from exc
     assert isinstance(payload["data"], dict), "data 不是对象"
     assert payload["data"].get("v") == 1, "data.v 不是 1"
-    return "字段齐全，appVersion=%s" % payload["appVersion"]
+    mf = payload["manifest"]
+    assert sorted(mf.keys()) == ["counts", "digest"], "清单字段异常: %s" % sorted(mf.keys())
+    for key in ("sos", "rum", "cert", "tr", "sleep", "parked"):
+        assert mf["counts"][key] == len(payload["data"].get(key) or []), (
+            "清单里 %s 的条数不对" % key
+        )
+    want = "fnv1a32:" + fnv1a32(json.dumps(payload["data"], ensure_ascii=False, separators=(",", ":")))
+    assert mf["digest"] == want, "指纹与内容不符: %s != %s" % (mf["digest"], want)
+    return "字段齐全，appVersion=%s，清单与指纹可复算" % payload["appVersion"]
 
 
 def _export_content(holder, page):
@@ -2409,10 +2430,11 @@ def _enc_export(page, holder):
 def _enc_structure(holder):
     assert holder.get("text"), "没有拿到加密备份内容"
     data = json.loads(holder["text"])
-    assert sorted(data.keys()) == ["app", "appVersion", "enc", "exportedAt", "schemaVersion"], (
+    assert sorted(data.keys()) == ["app", "appVersion", "enc", "exportedAt", "format", "schemaVersion"], (
         "加密备份顶层字段异常: %s" % sorted(data.keys())
     )
     assert data["app"] == "zhuolu", "app 标记缺失"
+    assert data["format"] == 1, "format 标记缺失"
     assert data["enc"]["alg"] == "AES-GCM-256", "算法不对"
     assert data["enc"]["kdf"] == "PBKDF2-SHA256", "KDF 不对"
     for key in ("salt", "iv", "ct"):
@@ -2614,7 +2636,7 @@ def _edit_rum(page):
     visible(page, "#edit-overlay")
     assert MARK in page.input_value("#ef-thought"), "编辑器没带上原内容"
     assert page.eval_on_selector("#ef-kind", "e => e.value") == "others", "分类下拉没选中原值"
-    page.fill("#ef-thought", "QA-反刍-改过了 " + MARK)
+    fill_field(page, "#ef-thought", "QA-反刍-改过了 " + MARK)
     page.click("#edit-overlay [data-action='save-edit']")
     hidden(page, "#edit-overlay")
     wait_text(page, "#rec-rum", "QA-反刍-改过了")
@@ -2633,8 +2655,7 @@ def _edit_required(page):
     page.locator("[data-rec-panel='tr'] [data-action='edit-record']").first.click()
     visible(page, "#edit-overlay")
     kicker = page.inner_text("#edit-kicker")
-    page.fill("#ef-thought", "   ")
-    typed = page.evaluate("() => document.getElementById('ef-thought').value")
+    typed = fill_field(page, "#ef-thought", "   ")
     page.click("#edit-overlay [data-action='save-edit']")
     try:
         visible(page, "#edit-err", timeout=6000)
@@ -2662,8 +2683,8 @@ def _edit_number(page):
     page.click("[data-rec-tab='sos']")
     page.locator("[data-rec-panel='sos'] [data-action='edit-record']").first.click()
     visible(page, "#edit-overlay")
-    page.fill("#ef-before", "99")
-    page.fill("#ef-after", "2")
+    fill_field(page, "#ef-before", "99")
+    fill_field(page, "#ef-after", "2")
     page.click("#edit-overlay [data-action='save-edit']")
     hidden(page, "#edit-overlay")
     state = app_state(page)
@@ -3409,6 +3430,162 @@ def group_data(run):
     run.check("数据拓扑", "连续点击不丢更新", lambda: _data_rapid(run), None)
 
 
+# ---------------------------------------------------------------- 0.9.0 备份自检
+
+def fnv1a32(text):
+    """和 app.js 里同一份算法：UTF-8 字节，FNV-1a 32 位。"""
+    h = 0x811C9DC5
+    for b in text.encode("utf-8"):
+        h = (h ^ b) & 0xFFFFFFFF
+        h = (h * 0x01000193) & 0xFFFFFFFF
+    return "%08x" % h
+
+
+def choose_verify(page, file_path):
+    with page.expect_file_chooser(timeout=15000) as chooser:
+        page.click("[data-action='verify-backup']")
+    chooser.value.set_files(str(file_path))
+    visible(page, "#verify-overlay")
+
+
+def vf_text(page, sel):
+    return page.eval_on_selector(sel, "el => el.textContent").strip()
+
+
+def vf_fixture(run, name, payload):
+    path = run.out_dir / "fixtures" / name
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def vf_close(page):
+    page.click("[data-action='close-verify']")
+    hidden(page, "#verify-overlay")
+
+
+VF_STATE = dict(
+    rum=[{"id": "vf-r1", "t": 1000, "kind": "self", "thought": "自检：反刍一", "action": ""},
+         {"id": "vf-r2", "t": 2000, "kind": "why", "thought": "自检：反刍二", "action": ""}],
+    tr=[{"id": "vf-t1", "t": 3000, "thought": "自检：思维"}],
+    daily={"2026-11-10": {"sleep": True, "eat": False, "move": True,
+                         "connect": False, "push": False}},
+)
+
+
+def _vf_prepare(run, page, holder):
+    reseed(page, base_state(**VF_STATE), "more")
+    _export_download(page, holder)
+    payload = json.loads(holder["text"])
+    assert payload.get("format") == 1, "信封里没有 format=1"
+    mf = payload["manifest"]
+    assert mf["counts"]["rum"] == 2 and mf["counts"]["tr"] == 1, "清单条数不对: %s" % mf["counts"]
+    assert mf["counts"]["days"] == 1 and mf["counts"]["cells"] == 2, "打卡清单不对: %s" % mf["counts"]
+    want = "fnv1a32:" + fnv1a32(json.dumps(payload["data"], ensure_ascii=False, separators=(",", ":")))
+    assert mf["digest"] == want, "指纹复算不一致: %s != %s" % (mf["digest"], want)
+    holder["payload"] = payload
+    return "format=1 · 清单 %d 条 / %d 天 / %d 格 · 指纹 %s 复算一致" % (
+        mf["counts"]["total"], mf["counts"]["days"], mf["counts"]["cells"], mf["digest"][8:])
+
+
+def _vf_good(run, page, holder):
+    path = vf_fixture(run, "verify-good.json", holder["payload"])
+    choose_verify(page, path)
+    verdict = vf_text(page, "#verify-verdict")
+    note = vf_text(page, "#verify-note")
+    counts = vf_text(page, "#verify-counts")
+    assert verdict.startswith("完整"), "结论不对: %s" % verdict
+    assert "对得上" in note, "指纹结论不对: %s" % note
+    assert "打卡 1 天" in counts and "勾选 2 格" in counts, "条数展示不对: %s" % counts
+    btn = page.eval_on_selector("#verify-import-btn", "el => el.disabled")
+    assert btn is False, "完整备份时「导入这份」应可用"
+    vf_close(page)
+    return verdict
+
+
+def _vf_tamper(run, page, holder):
+    bad = json.loads(json.dumps(holder["payload"]))
+    bad["data"]["rum"][0]["thought"] = "被改过的一句"
+    path = vf_fixture(run, "verify-tampered.json", bad)
+    choose_verify(page, path)
+    verdict = vf_text(page, "#verify-verdict")
+    assert verdict.startswith("对不上"), "改过的文件应被指出: %s" % verdict
+    assert "内容指纹对不上" in verdict, "应点名指纹: %s" % verdict
+    vf_close(page)
+    return verdict
+
+
+def _vf_missing(run, page, holder):
+    miss = json.loads(json.dumps(holder["payload"]))
+    miss["data"]["rum"].pop()
+    path = vf_fixture(run, "verify-missing.json", miss)
+    choose_verify(page, path)
+    verdict = vf_text(page, "#verify-verdict")
+    assert "反刍写的是 2 条，实际读到 1 条" in verdict, "应指出少了一条: %s" % verdict
+    vf_close(page)
+    return verdict
+
+
+def _vf_old(run, page, holder):
+    old = json.loads(json.dumps(holder["payload"]))
+    old.pop("manifest", None)
+    old.pop("format", None)
+    old["appVersion"] = "0.3.0"
+    path = vf_fixture(run, "verify-old.json", old)
+    choose_verify(page, path)
+    verdict = vf_text(page, "#verify-verdict")
+    note = vf_text(page, "#verify-note")
+    assert "没有清单" in note, "旧文件应说明没有清单: %s" % note
+    assert verdict.startswith("读得出"), "旧文件结论不对: %s" % verdict
+    vf_close(page)
+    return "%s · %s" % (verdict, note.split(" · ")[0])
+
+
+def _vf_readonly(run, page, holder):
+    keys = [k for k in app_state(page)["__keys"] if not k.startswith("daily|")]
+    assert sorted(keys) == ["rum|vf-r1", "rum|vf-r2", "tr|vf-t1"], "本机记录被检查动过: %s" % keys
+    return "四次检查后本机仍是 %d 条" % len(keys)
+
+
+def _vf_import(run, page, holder):
+    path = vf_fixture(run, "verify-good2.json", holder["payload"])
+    choose_verify(page, path)
+    page.click("[data-action='verify-import']")
+    visible(page, "#import-overlay")
+    hidden(page, "#verify-overlay")
+    name = vf_text(page, "#import-counts")
+    assert "反刍 2" in name.replace("\n", " "), "导入预览条数不对: %s" % name
+    return "从检查浮层直接进导入预览，条数一致"
+
+
+def _vf_report(run, page, holder):
+    page.click("[data-action='import-merge']")
+    page.wait_for_timeout(600)
+    toast = vf_text(page, "#toast-msg")
+    assert "已合并" in toast and "跳过 3 条已经在的" in toast, "导入报告不对: %s" % toast
+    note = vf_text(page, "#import-note")
+    assert "上次导入" in note and "跳过 3 条" in note, "「更多」页没留下导入记录: %s" % note
+    keys = [k for k in app_state(page)["__keys"] if not k.startswith("daily|")]
+    assert len(keys) == 3, "重复合并后条数应不变，实际 %d" % len(keys)
+    return "%s · %s" % (toast, note)
+
+
+def group_verify(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("more")
+    holder = {}
+    try:
+        run.check("备份自检", "导出文件带清单与指纹", lambda: _vf_prepare(run, page, holder), page)
+        run.check("备份自检", "检查一份好备份：结论完整", lambda: _vf_good(run, page, holder), page)
+        run.check("备份自检", "改一个值后指纹对不上", lambda: _vf_tamper(run, page, holder), page)
+        run.check("备份自检", "少一条记录时条数对不上", lambda: _vf_missing(run, page, holder), page)
+        run.check("备份自检", "旧备份没有清单只数条数", lambda: _vf_old(run, page, holder), page)
+        run.check("备份自检", "检查不动本机数据", lambda: _vf_readonly(run, page, holder), page)
+        run.check("备份自检", "检查完可一键转导入", lambda: _vf_import(run, page, holder), page)
+        run.check("备份自检", "导入后给出新增与跳过", lambda: _vf_report(run, page, holder), page)
+    finally:
+        session.close()
+
+
 GROUPS = [
     ("加载与结构", group_smoke),
     ("SOS 着陆", group_sos),
@@ -3423,6 +3600,7 @@ GROUPS = [
     ("隐私与安全", group_privacy),
     ("0.7.0 存储", group_storage),
     ("数据拓扑", group_data),
+    ("备份自检", group_verify),
     ("记录与小结", group_records),
     ("全局汇总", group_global),
 ]

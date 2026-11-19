@@ -1572,6 +1572,16 @@ a, button, .chip, .tab, summary { touch-action: manipulation; }
 }
 .import-warn[hidden] { display: none; }
 
+.import-ok {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--sage-soft);
+  color: var(--ink-2);
+  border: 1px solid var(--sage-line);
+}
+.import-ok[hidden] { display: none; }
+
 
 /* ---------- 回顾页---------- */
 

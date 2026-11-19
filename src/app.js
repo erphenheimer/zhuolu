@@ -6,8 +6,9 @@
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.8.0';
-  var SCHEMA_VERSION = 1;
+  var APP_VERSION = '0.9.0';
+  var SCHEMA_VERSION = 1;      // 数据本身的字段集合版本：导出文件里写的 schemaVersion
+  var FORMAT_VERSION = 1;      // 备份文件的信封版本：和本机存储布局无关，各走各的
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
   var KDF_ITER = 210000;
   var MIN_PASS = 6;
@@ -66,14 +67,15 @@
       safety: { signals: [], coping: [], distract: [], people: [], pros: [], env: [], reasons: [], updatedAt: 0 },
       settings: {
         theme: 'auto', motion: 'auto', support: ['', ''], lastExportAt: 0, nudgeSnoozeUntil: 0,
-        quickExit: 'search', quickExitUrl: ''
+        quickExit: 'search', quickExitUrl: '', lastImport: null
       }
     };
   }
 
   var storageOK = true;
 
-  function normalize(raw) {
+  // stats 是可选的：导入 / 检查时用来数「有几条读不懂、几条重复、几条补了 id」
+  function normalize(raw, stats) {
     var b = blank();
     if (!raw || typeof raw !== 'object') return b;
     ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
@@ -81,11 +83,14 @@
       var seen = {};
       var out = [];
       raw[k].forEach(function (x) {
-        if (!x || typeof x !== 'object' || Array.isArray(x)) return;   // 数组和标量不是记录
+        if (!x || typeof x !== 'object' || Array.isArray(x)) {          // 数组和标量不是记录
+          if (stats) stats.bad++;
+          return;
+        }
         // 没有 id 的老记录补一个：分条存储要按 id 对齐，导入去重也靠它
-        if (!x.id) x.id = uid();
+        if (!x.id) { x.id = uid(); if (stats) stats.fixedId++; }
         var id = String(x.id);
-        if (seen[id]) return;                                          // 同一份文件里 id 重复，只留第一条
+        if (seen[id]) { if (stats) stats.dup++; return; }               // 同一份文件里 id 重复，只留第一条
         seen[id] = true;
         out.push(x);
       });
@@ -104,6 +109,16 @@
       if (Array.isArray(raw.settings.support)) b.settings.support = [String(raw.settings.support[0] || ''), String(raw.settings.support[1] || '')];
       b.settings.lastExportAt = Number(raw.settings.lastExportAt) || 0;
       b.settings.nudgeSnoozeUntil = Number(raw.settings.nudgeSnoozeUntil) || 0;
+      var li = raw.settings.lastImport;
+      if (li && typeof li === 'object' && !Array.isArray(li)) {
+        b.settings.lastImport = {
+          at: Number(li.at) || 0,
+          mode: li.mode === 'overwrite' ? 'overwrite' : 'merge',
+          added: Number(li.added) || 0,
+          skipped: Number(li.skipped) || 0,
+          ignored: Number(li.ignored) || 0
+        };
+      }
       var qe = raw.settings.quickExit;
       b.settings.quickExit = ['search', 'weather', 'blank', 'custom'].indexOf(qe) >= 0 ? qe : 'search';
       b.settings.quickExitUrl = String(raw.settings.quickExitUrl || '').slice(0, 400);
@@ -970,13 +985,31 @@
           if (!lsSet(KEY, JSON.stringify(env))) return '写不进去，先导出一份备份。';
           return done();
         }
-        // 上锁之后明文不能再留在盘上：同一事务里删掉所有行和升级前的快照
-        var tx = store.db.transaction([DB_REC, DB_META], 'readwrite');
-        tx.objectStore(DB_REC).clear();
-        var ms = tx.objectStore(DB_META);
-        ['state', 'daily', 'snapshot-v1'].forEach(function (k) { ms.delete(k); });
-        ms.put(safeJson(env), 'env');
-        return txDone(tx).then(done);
+        // 上锁之后明文不能再留在盘上：同一事务里删掉所有行和升级前的快照。
+        // 这一步必须排在写队列后面——之前排着的明文保存先落完再清，清的时候就把
+        // lock.on 打开，之后进来的保存只会写信封，不会再把明文行写回来。
+        saveChain = saveChain.then(function () {
+          lock.on = true;
+          lock.unlocked = true;
+          lock.key = key;
+          lock.meta = env.lock;
+          cache = null;
+          var tx = store.db.transaction([DB_REC, DB_META], 'readwrite');
+          tx.objectStore(DB_REC).clear();
+          var ms = tx.objectStore(DB_META);
+          ['state', 'daily', 'snapshot-v1'].forEach(function (mk) { ms.delete(mk); });
+          ms.put(safeJson(env), 'env');
+          return txDone(tx).then(function () { return true; }, function () { return false; });
+        });
+        return saveChain.then(function (ok) {
+          if (ok) return null;
+          lock.on = false;
+          lock.key = null;
+          lock.meta = null;
+          lock.unlocked = true;
+          cache = null;
+          return '这台设备上的浏览器没能完成加密。';
+        });
       });
     }).catch(function () { return '这台设备上的浏览器没能完成加密。'; });
   }
@@ -997,10 +1030,20 @@
       return finishUnlockOff();
     }
     if (!store.db) return '写不进去，先导出一份备份。';
-    cache = null;
-    var plan = buildPlanRows(true);      // 全量摊成行
-    plan.mdel = ['env'];
-    return idbWrite(plan).then(finishUnlockOff, function () { return '写不进去，先导出一份备份。'; });
+    // 和上锁对称：先落完排着的信封写入，再一次性摊成明文行并删掉信封，
+    // 免得队列里迟到的信封写入在解锁之后又把 env 写回来
+    saveChain = saveChain.then(function () {
+      cache = null;
+      var plan = buildPlanRows(true);      // 全量摊成行
+      plan.mdel = ['env'];
+      return idbWrite(plan).then(function () {
+        lock.on = false;                   // 写成了才切：之后的保存走明文行
+        return true;
+      }, function () { return false; });
+    });
+    return saveChain.then(function (ok) {
+      return ok ? finishUnlockOff() : '写不进去，先导出一份备份。';
+    });
   }
 
   function finishUnlockOff() {
@@ -3266,6 +3309,19 @@
     showToast('记下了。难受的时候直接发那句话。');
   }
 
+  function renderImportNote() {
+    var el = $('#import-note');
+    if (!el) return;
+    var li = state.settings.lastImport;
+    if (!li || !li.at) { el.hidden = true; el.textContent = ''; return; }
+    var s = '上次导入：' + fmtDayTime(li.at) + (li.mode === 'overwrite' ? '（覆盖）' : '（合并）') +
+      ' · 新增 ' + (li.added || 0) + ' 条';
+    if (li.skipped) s += ' · 跳过 ' + li.skipped + ' 条';
+    if (li.ignored) s += ' · 重复或损坏 ' + li.ignored + ' 条';
+    el.hidden = false;
+    el.textContent = s;
+  }
+
   function renderSettings() {
     var w = $('#setting-window');
     if (w) w.value = state.window.time;
@@ -3281,6 +3337,7 @@
       if (document.activeElement !== qu) qu.value = state.settings.quickExitUrl || '';
     }
     renderPrivacy();
+    renderImportNote();
     refreshStorageNote();
   }
 
@@ -3360,14 +3417,72 @@
     showToast(okMsg);
   }
 
+  /* ---------- 备份文件清单：条数 + 内容指纹 ---------- */
+
+  var DIGEST_TAG = 'fnv1a32:';
+
+  // FNV-1a 32 位，按 UTF-8 字节算。选它是因为短、稳定、在任何语言里都能几行复算
+  function fnv1a32(str) {
+    var bytes;
+    try {
+      bytes = new TextEncoder().encode(str);
+    } catch (e) {
+      var s = unescape(encodeURIComponent(str));
+      bytes = new Uint8Array(s.length);
+      for (var i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    }
+    var h = 0x811c9dc5;
+    for (var j = 0; j < bytes.length; j++) {
+      h = (h ^ bytes[j]) >>> 0;
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return ('0000000' + h.toString(16)).slice(-8);
+  }
+
+  // 指纹只对 data 做紧凑序列化后算：换行、缩进怎么变都不影响
+  function digestOf(data) {
+    try { return DIGEST_TAG + fnv1a32(JSON.stringify(data)); }
+    catch (e) { return ''; }
+  }
+
+  var COUNT_KEYS = ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'];
+
+  // 文件里到底有多少东西：六个集合 + 打卡天数 + 打过勾的格子数
+  function dataCounts(data) {
+    var out = {};
+    var total = 0;
+    COUNT_KEYS.forEach(function (k) {
+      var n = (data && Array.isArray(data[k])) ? data[k].length : 0;
+      out[k] = n;
+      total += n;
+    });
+    var days = 0, cells = 0;
+    var daily = (data && data.daily) || {};
+    Object.keys(daily).forEach(function (day) {
+      var v = daily[day];
+      if (!day || !v || typeof v !== 'object' || Array.isArray(v)) return;
+      var n = 0;
+      Object.keys(v).forEach(function (c) { if (v[c]) n++; });
+      if (!n) return;                       // 一天都没打勾不算一天
+      days++;
+      cells += n;
+    });
+    out.days = days;
+    out.cells = cells;
+    out.total = total;
+    return out;
+  }
+
   function exportJSON() {
     state.settings.lastExportAt = Date.now();
     save();
     var payload = {
       app: 'zhuolu',
+      format: FORMAT_VERSION,
       schemaVersion: SCHEMA_VERSION,
       appVersion: APP_VERSION,
       exportedAt: new Date().toISOString(),
+      manifest: { counts: dataCounts(state), digest: digestOf(state) },
       data: state
     };
     saveFile('zhuolu-backup-' + dayKey() + '.json', JSON.stringify(payload, null, 2), 'application/json;charset=utf-8',
@@ -3470,7 +3585,7 @@
       ['睡前', d.sleep.length],
       ['着陆', d.sos.length],
       ['盒子', d.parked.length],
-      ['今日打卡', Object.keys(d.daily || {}).length + ' 天']
+      ['今日打卡', dataCounts(d).days + ' 天']
     ];
     if (countsEl) countsEl.innerHTML = rows.map(function (r) { return '<span>' + r[0] + ' <b>' + r[1] + '</b></span>'; }).join('');
   }
@@ -3478,12 +3593,10 @@
   var pendingEnc = null;
   var deferredImport = null;
 
-  function acceptParsed(parsed, name, fromEnc) {
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad backup');
-    if (parsed.app && parsed.app !== 'zhuolu') {
-      showToast('这不是着陆台的备份文件。');
-      return false;
-    }
+  // 把一份备份读成「信封 + 数据 + 这份文件里到底有多少东西」。导入和检查共用一条路
+  function readBackup(parsed, name, fromEnc) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { fail: '这个文件不是一个有效的备份。' };
+    if (parsed.app && parsed.app !== 'zhuolu') return { fail: '这不是着陆台的备份文件。' };
     var raw = parsed;
     var meta = null;
     var warning = '';
@@ -3493,22 +3606,28 @@
       meta = parsed;
       var sv = Number(parsed.schemaVersion) || 0;
       if (sv > SCHEMA_VERSION) {
-        warning = '这份备份来自更新版本（格式 v' + sv + '），当前版本可能读不全。建议先升级应用，再导入。';
+        warning = '这份备份来自更新版本（数据格式 v' + sv + '），当前版本可能读不全。建议先升级应用，再导入。';
         blocked = true;
       }
     }
-    var data = normalize(raw);
-    var total = data.sos.length + data.rum.length + data.cert.length + data.tr.length + data.sleep.length + data.parked.length;
+    // 指纹要在 normalize 之前算：补 id 会改对象
+    var digest = digestOf(raw);
+    var counts = dataCounts(raw);
+    var stats = { bad: 0, dup: 0, fixedId: 0 };
+    var data = normalize(raw, stats);
+    var total = 0;
+    COUNT_KEYS.forEach(function (k) { total += data[k].length; });
     if (!total) warning = warning || '这份备份里没有可导入的记录。';
-    pendingImport = {
-      data: data,
-      meta: meta,
-      name: name,
-      total: total,
-      warning: warning,
-      blocked: blocked,
-      enc: !!fromEnc
+    return {
+      raw: raw, meta: meta, data: data, stats: stats, counts: counts, digest: digest,
+      total: total, warning: warning, blocked: blocked, name: name, enc: !!fromEnc
     };
+  }
+
+  function acceptParsed(parsed, name, fromEnc) {
+    var job = readBackup(parsed, name, fromEnc);
+    if (job.fail) { showToast(job.fail); return false; }
+    pendingImport = job;
     renderImportDialog();
     openOverlay('#import-overlay');
     return true;
@@ -3529,6 +3648,16 @@
   }
 
   function importJSON() {
+    pickBackup(function (parsed, name, fromEnc) { acceptParsed(parsed, name, fromEnc); });
+  }
+
+  /* ---------- 检查一份备份 ---------- */
+
+  var pendingVerify = null;
+  var VERIFY_LABEL = { sos: '着陆', rum: '反刍', cert: '确定性', tr: '思维记录', sleep: '睡前', parked: '盒子' };
+
+  // 选文件 → 读文本 → 解 JSON → 需要的话先解口令。导入和检查共用
+  function pickBackup(then) {
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,application/json';
@@ -3557,13 +3686,13 @@
               var job = deferredImport;
               deferredImport = null;
               if (!job) return;
-              try { acceptParsed(job.parsed, job.name, true); }
+              try { then(job.parsed, job.name, true); }
               catch (e) { showToast('这份备份读不出来。'); }
             }
           });
           return;
         }
-        try { acceptParsed(parsed, f.name, false); }
+        try { then(parsed, f.name, false); }
         catch (e) { showToast('这个文件读不出来，可能不是本工具的备份。'); }
       };
       reader.readAsText(f, 'utf-8');
@@ -3571,15 +3700,110 @@
     input.click();
   }
 
+  function verifyBackup() {
+    pickBackup(function (parsed, name, fromEnc) { verifyParsed(parsed, name, fromEnc); });
+  }
+
+  function verifyParsed(parsed, name, fromEnc) {
+    var job = readBackup(parsed, name, fromEnc);
+    if (job.fail) { showToast(job.fail); return; }
+    var c = job.counts;
+    var mf = (job.meta && job.meta.manifest && typeof job.meta.manifest === 'object') ? job.meta.manifest : null;
+    var mc = (mf && mf.counts && typeof mf.counts === 'object') ? mf.counts : null;
+    var reasons = [];
+    if (mc) {
+      COUNT_KEYS.forEach(function (k) {
+        if (Number(mc[k]) !== c[k]) reasons.push(VERIFY_LABEL[k] + '写的是 ' + (Number(mc[k]) || 0) + ' 条，实际读到 ' + c[k] + ' 条');
+      });
+      if (mc.days !== undefined && Number(mc.days) !== c.days) reasons.push('打卡写的是 ' + (Number(mc.days) || 0) + ' 天，实际读到 ' + c.days + ' 天');
+      if (mc.cells !== undefined && Number(mc.cells) !== c.cells) reasons.push('勾选写的是 ' + (Number(mc.cells) || 0) + ' 格，实际读到 ' + c.cells + ' 格');
+    }
+    var digestNote;
+    if (mf && mf.digest) {
+      var want = String(mf.digest);
+      var got = job.digest;
+      if (want !== got) reasons.push('内容指纹对不上（清单 ' + want.replace(DIGEST_TAG, '') + '，实际 ' + got.replace(DIGEST_TAG, '') + '）');
+      digestNote = '内容指纹 ' + got.replace(DIGEST_TAG, '') + (want === got ? '（对得上）' : '（对不上）');
+    } else {
+      digestNote = '这份文件里没有清单，只按内容数了条数。';
+    }
+    var ok = false;
+    var verdict;
+    if (job.blocked) {
+      verdict = '来自更新版本，当前版本读不全，先升级再导入。';
+    } else if (!c.total && !c.cells) {
+      verdict = '这份文件里没有记录。';
+    } else if (reasons.length) {
+      verdict = '对不上：' + reasons.join('；') + '。文件可能没存完整，或被改过。';
+    } else {
+      ok = true;
+      verdict = mc ? '完整：清单里写的和文件里的对得上。' : '读得出 ' + c.total + ' 条，文件里的旧版本没有清单。';
+    }
+    var parts = ['文件：' + name];
+    if (job.enc) parts.push('加密备份');
+    if (job.meta) {
+      var t = job.meta.exportedAt ? Date.parse(job.meta.exportedAt) : NaN;
+      if (!isNaN(t)) parts.push('导出于 ' + fmtDayTime(t));
+      if (job.meta.appVersion) parts.push('版本 v' + job.meta.appVersion);
+      if (job.meta.format) parts.push('文件格式 v' + job.meta.format);
+    } else {
+      parts.push('旧版备份（没有版本信息）');
+    }
+    var extra = [digestNote];
+    if (job.stats.dup) extra.push('文件里有 ' + job.stats.dup + ' 条重复 id，按第一条算');
+    if (job.stats.bad) extra.push(job.stats.bad + ' 条读不懂的行导入时会丢掉');
+    if (job.stats.fixedId) extra.push(job.stats.fixedId + ' 条老记录没有 id，导入时自动补');
+    if (c.days) extra.push('含 ' + c.days + ' 天打卡');
+    job.ok = ok;
+    pendingVerify = job;
+    var fEl = $('#verify-file');
+    if (fEl) fEl.textContent = parts.join(' · ');
+    var vEl = $('#verify-verdict');
+    if (vEl) {
+      vEl.textContent = verdict;
+      vEl.className = 'small ' + (ok ? 'import-ok' : 'import-warn');
+      vEl.hidden = false;
+    }
+    var cEl = $('#verify-counts');
+    if (cEl) {
+      cEl.innerHTML = COUNT_KEYS.map(function (k) {
+        return '<span>' + VERIFY_LABEL[k] + ' <b>' + c[k] + '</b></span>';
+      }).join('') + '<span>打卡 <b>' + c.days + '</b> 天</span><span>勾选 <b>' + c.cells + '</b> 格</span>';
+    }
+    var nEl = $('#verify-note');
+    if (nEl) nEl.textContent = extra.join(' · ');
+    var btn = $('#verify-import-btn');
+    if (btn) btn.disabled = !ok;
+    openOverlay('#verify-overlay');
+  }
+
+  function closeVerify() {
+    pendingVerify = null;
+    closeOverlay('#verify-overlay');
+  }
+
+  // 查完顺手导入，省得再选一次文件
+  function verifyImport() {
+    if (!pendingVerify || !pendingVerify.ok) return;
+    var job = pendingVerify;
+    pendingVerify = null;
+    pendingImport = job;
+    closeOverlay('#verify-overlay');
+    renderImportDialog();
+    openOverlay('#import-overlay');
+  }
+
   function exportEncrypted(pass) {
     if (!cryptoOK) return '这个浏览器不支持加密（要用 HTTPS 或 localhost 打开）。';
     var salt = b64FromBytes(randBytes(16));
     var payload = {
       app: 'zhuolu',
+      format: FORMAT_VERSION,
       schemaVersion: SCHEMA_VERSION,
       appVersion: APP_VERSION,
       exportedAt: new Date().toISOString(),
       locked: true,
+      manifest: { counts: dataCounts(state), digest: digestOf(state) },
       data: state
     };
     return deriveKey(pass, salt, KDF_ITER).then(function (key) {
@@ -3587,6 +3811,7 @@
     }).then(function (out) {
       var env = {
         app: 'zhuolu',
+        format: FORMAT_VERSION,
         enc: {
           v: 1,
           alg: 'AES-GCM-256',
@@ -3617,21 +3842,40 @@
   function overwriteImport() {
     if (!pendingImport || pendingImport.blocked) return;
     if (!confirm('覆盖当前全部数据？建议先导出当前备份。')) return;
-    state = normalize(pendingImport.data);
+    var stats = pendingImport.stats || {};
+    var added = pendingImport.total;
+    var ignored = (stats.bad || 0) + (stats.dup || 0);
+    state = pendingImport.data;    // readBackup 里已经 normalize 过
+    state.settings.lastImport = { at: Date.now(), mode: 'overwrite', added: added, skipped: 0, ignored: ignored };
     save({ full: true });          // 整份替换：删掉的记录和打卡也要跟着消失
     applyTheme();
     clearCertFields();
     renderAll();
     pendingImport = null;
     closeOverlay('#import-overlay');
-    showToast('导入完成。');
+    showToast(importToast('overwrite', added, 0, ignored));
+  }
+
+  function importToast(mode, added, skipped, ignored) {
+    var s = (mode === 'overwrite' ? '导入 ' : '新增 ') + added + ' 条';
+    if (skipped) s += '，跳过 ' + skipped + ' 条已经在的';
+    if (ignored) s += '，另有 ' + ignored + ' 条重复或损坏没算';
+    return (mode === 'overwrite' ? '已覆盖：' : '已合并：') + s + '。';
   }
 
   function mergeImport() {
     if (!pendingImport || pendingImport.blocked) return;
     var d = pendingImport.data;
-    ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
-      state[k] = mergeList(state[k], d[k]);
+    var stats = pendingImport.stats || {};
+    var added = 0, skipped = 0;
+    COUNT_KEYS.forEach(function (k) {
+      var cur = state[k] || [];
+      var seen = {};
+      cur.forEach(function (x) { seen[itemKey(x)] = true; });
+      (d[k] || []).forEach(function (x) {
+        if (seen[itemKey(x)]) skipped++; else added++;
+      });
+      state[k] = mergeList(cur, d[k]);
     });
     if (d.daily && typeof d.daily === 'object') {
       Object.keys(d.daily).forEach(function (day) {
@@ -3644,13 +3888,14 @@
       });
     }
     if (d.firstSeen && d.firstSeen < state.firstSeen) state.firstSeen = d.firstSeen;
+    var ignored = (stats.bad || 0) + (stats.dup || 0);
+    state.settings.lastImport = { at: Date.now(), mode: 'merge', added: added, skipped: skipped, ignored: ignored };
     save();
     applyTheme();
     renderAll();
-    var added = pendingImport.total;
     pendingImport = null;
     closeOverlay('#import-overlay');
-    showToast('已合并 ' + added + ' 条记录。');
+    showToast(importToast('merge', added, skipped, ignored));
   }
 
   var deferredPrompt = null;
@@ -3934,6 +4179,9 @@
     'rv-kind': function (el) { setFilterKind(el.getAttribute('data-rv-kind')); },
     'rv-range': function (el) { setFilterRange(el.getAttribute('data-rv-range')); },
     'import-json': importJSON,
+    'verify-backup': verifyBackup,
+    'close-verify': closeVerify,
+    'verify-import': verifyImport,
     'close-import': closeImport,
     'import-merge': mergeImport,
     'import-overwrite': overwriteImport,
@@ -4244,6 +4492,7 @@
     }
     if (e.key === 'Escape') {
       if ($('#pass-overlay') && !$('#pass-overlay').hidden) { closePass(); return; }
+      if ($('#verify-overlay') && !$('#verify-overlay').hidden) { closeVerify(); return; }
       if ($('#import-overlay') && !$('#import-overlay').hidden) { closeImport(); return; }
       if ($('#edit-overlay') && !$('#edit-overlay').hidden) { closeEdit(); return; }
       if ($('#sp-overlay') && !$('#sp-overlay').hidden) { closeSpView(); return; }
