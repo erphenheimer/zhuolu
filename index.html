@@ -2696,7 +2696,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
         <p class="small mt-12">适用场景：情绪危机、反刍、焦虑、失眠，或刚被某件事击中之后的难以平复；不限于某一种关系、某一类事件，也不要求你说得清原因。</p>
         <p class="small mt-12">所有数据只保存在浏览器本地（IndexedDB），不上传、不联网。安装到主屏或桌面后仍是同一份本地数据；换设备、清浏览器数据前，先在下面导出备份。</p>
         <p class="small muted mt-12">如果它让你更难受，先停下来。工具不是任务。</p>
-        <p class="small muted mt-12">开源版本 v0.7.0 · MIT 许可 · 2026-11</p>
+        <p class="small muted mt-12">开源版本 v0.8.0 · MIT 许可 · 2026-11</p>
       </div>
     </section>
 
@@ -3105,7 +3105,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   'use strict';
 
   var KEY = 'zhuolu.v1';
-  var APP_VERSION = '0.7.0';
+  var APP_VERSION = '0.8.0';
   var SCHEMA_VERSION = 1;
   var ROUTES = ['now', 'rumination', 'certainty', 'today', 'review', 'safety', 'more'];
   var KDF_ITER = 210000;
@@ -3177,9 +3177,18 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     if (!raw || typeof raw !== 'object') return b;
     ['sos', 'rum', 'cert', 'tr', 'sleep', 'parked'].forEach(function (k) {
       if (!Array.isArray(raw[k])) return;
-      b[k] = raw[k].filter(function (x) { return x && typeof x === 'object'; });
-      // 没有 id 的老记录补一个：分条存储要按 id 对齐，导入去重也靠它
-      b[k].forEach(function (x) { if (!x.id) x.id = uid(); });
+      var seen = {};
+      var out = [];
+      raw[k].forEach(function (x) {
+        if (!x || typeof x !== 'object' || Array.isArray(x)) return;   // 数组和标量不是记录
+        // 没有 id 的老记录补一个：分条存储要按 id 对齐，导入去重也靠它
+        if (!x.id) x.id = uid();
+        var id = String(x.id);
+        if (seen[id]) return;                                          // 同一份文件里 id 重复，只留第一条
+        seen[id] = true;
+        out.push(x);
+      });
+      b[k] = out;
     });
     if (raw.daily && typeof raw.daily === 'object') b.daily = raw.daily;
     if (raw.window && typeof raw.window === 'object') {
@@ -3311,7 +3320,8 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   var DB_VER = 1;
   var DB_REC = 'rec';
   var DB_META = 'meta';
-  var SCHEMA_MARK = 1;
+  var SCHEMA_MARK = 2;            // 2：打卡从 meta 里拆出来，一天一行
+  var DAY_PREFIX = 'daily|';
 
   var store = { backend: 'ls', db: null, migrationFailed: false, quota: 0, usage: 0 };
   var cache = null;          // 已落盘的快照，用来算差量
@@ -3382,6 +3392,17 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     var rs = tx.objectStore(DB_REC);
     var ms = tx.objectStore(DB_META);
     (plan.rec || []).forEach(function (p) { rs.put(p[1], p[0]); });
+    // 打卡按格子合并：同一个事务里读-改-写，两个标签页各打各的勾不会互相盖掉
+    (plan.merge || []).forEach(function (m) {
+      var req = rs.get(m.key);
+      req.onsuccess = function () {
+        var cur = {};
+        try { cur = JSON.parse(req.result || '{}') || {}; } catch (e) { cur = {}; }
+        if (!cur || typeof cur !== 'object' || Array.isArray(cur)) cur = {};
+        Object.keys(m.cells || {}).forEach(function (c) { cur[c] = m.cells[c]; });
+        rs.put(safeJson(cur), m.key);
+      };
+    });
     (plan.del || []).forEach(function (k) { rs.delete(k); });
     (plan.meta || []).forEach(function (p) { ms.put(p[1], p[0]); });
     (plan.mdel || []).forEach(function (k) { ms.delete(k); });
@@ -3406,19 +3427,32 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     return { v: 1, firstSeen: state.firstSeen, window: state.window, safety: state.safety, settings: state.settings };
   }
 
-  // 把一份 state 摊成待写入的行
+  // 把一份 state 摊成待写入的行（打卡一天一行，不再挤在 meta 里）
   function rowsFrom(st) {
-    var plan = { rec: [], del: [], meta: [], mdel: [] };
+    var plan = { rec: [], del: [], merge: [], meta: [], mdel: [] };
     COLLS.forEach(function (c) {
       (st[c] || []).forEach(function (item) {
         if (!item || !item.id) return;
         plan.rec.push([c + '|' + String(item.id), safeJson(item)]);
       });
     });
+    dayList(st).forEach(function (day) {
+      plan.rec.push([DAY_PREFIX + day, safeJson(st.daily[day])]);
+    });
     var head = { v: 1, firstSeen: st.firstSeen, window: st.window, safety: st.safety, settings: st.settings };
     plan.meta.push(['state', safeJson(head)]);
-    plan.meta.push(['daily', safeJson(st.daily || {})]);
     return plan;
+  }
+
+  // 合法的日子：字符串键，值是对象
+  function dayList(st) {
+    var out = [];
+    Object.keys((st && st.daily) || {}).forEach(function (day) {
+      var v = st.daily[day];
+      if (!day || !v || typeof v !== 'object' || Array.isArray(v)) return;
+      out.push(day);
+    });
+    return out;
   }
 
   // 把行拼回一份 state。记录顺序由时间戳决定（unshift 是倒序，等价）
@@ -3426,19 +3460,39 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     var head = {};
     try { head = JSON.parse(all.meta.state || '{}') || {}; } catch (e) { head = {}; }
     var out = { v: 1, firstSeen: head.firstSeen, window: head.window, safety: head.safety, settings: head.settings };
-    try { out.daily = JSON.parse(all.meta.daily || '{}') || {}; } catch (e) { out.daily = {}; }
+    out.daily = {};
     COLLS.forEach(function (c) { out[c] = []; });
     all.recs.forEach(function (row) {
       var p = row.k.indexOf('|');
       if (p < 0) return;
       var ns = row.k.slice(0, p);
-      if (!out[ns] || ns === 'daily') return;
+      var rest = row.k.slice(p + 1);
+      if (ns === 'daily') {
+        var day = null;
+        try { day = JSON.parse(row.v); } catch (e) { day = null; }
+        if (day && typeof day === 'object' && !Array.isArray(day)) out.daily[rest] = day;
+        return;
+      }
+      if (!out[ns]) return;
       var item = null;
       try { item = JSON.parse(row.v); } catch (e) { item = null; }
-      if (!item || typeof item !== 'object') return;
-      if (!item.id) item.id = row.k.slice(p + 1);
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+      if (!item.id) {
+        item.id = rest;
+        markRec(ns, rest);              // 从键里补的 id 要写回盘上，不然只有内存里有
+      }
       out[ns].push(item);
     });
+    // 0.7.x 的打卡还在 meta 里：读到就并进来，等迁移把它拆成行
+    if (all.meta.daily) {
+      try {
+        var legacy = JSON.parse(all.meta.daily) || {};
+        Object.keys(legacy).forEach(function (day) {
+          var v = legacy[day];
+          if (!out.daily[day] && v && typeof v === 'object' && !Array.isArray(v)) out.daily[day] = v;
+        });
+      } catch (e) { /* ignore */ }
+    }
     COLLS.forEach(function (c) {
       out[c].sort(function (a, b) {
         var ta = Number(a && a.t) || 0;
@@ -3453,7 +3507,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   }
 
   function buildCache() {
-    cache = { rec: {}, meta: { state: '', daily: '' } };
+    cache = { rec: {}, daily: { byKey: {} }, meta: { state: '' } };
     COLLS.forEach(function (c) {
       var byKey = {};
       (state[c] || []).forEach(function (item) {
@@ -3462,8 +3516,10 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
       });
       cache.rec[c] = { byKey: byKey };
     });
+    dayList(state).forEach(function (day) {
+      cache.daily.byKey[day] = { json: safeJson(state.daily[day]) };
+    });
     cache.meta.state = safeJson(metaObj());
-    cache.meta.daily = safeJson(state.daily || {});
   }
 
   function markRec(kind, id) {
@@ -3473,11 +3529,32 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   // 只把变了的记录拿出来。没变的集合只做指针比较，不重新序列化。
   function buildPlanRows(force) {
     if (!cache) buildCache();
-    var plan = { rec: [], del: [], meta: [], mdel: [] };
+    var plan = { rec: [], del: [], merge: [], meta: [], mdel: [] };
     var mj = safeJson(metaObj());
-    var dj = safeJson(state.daily || {});
     if (force || mj !== cache.meta.state) { plan.meta.push(['state', mj]); cache.meta.state = mj; }
-    if (force || dj !== cache.meta.daily) { plan.meta.push(['daily', dj]); cache.meta.daily = dj; }
+    // 打卡：只写这一天里变过的格子，写的时候在事务里和盘上的合并
+    var prevDaily = (cache.daily && cache.daily.byKey) || {};
+    var nextDaily = {};
+    dayList(state).forEach(function (day) {
+      var json = safeJson(state.daily[day]);
+      var old = prevDaily[day];
+      nextDaily[day] = { json: json };
+      if (force) { plan.rec.push([DAY_PREFIX + day, json]); return; }
+      if (old && old.json === json) return;
+      var cells = {};
+      var prev = {};
+      if (old) { try { prev = JSON.parse(old.json) || {}; } catch (e) { prev = {}; } }
+      Object.keys(state.daily[day]).forEach(function (c) {
+        var now = !!state.daily[day][c];
+        if (old ? (!!prev[c] !== now) : now) cells[c] = now;
+      });
+      if (!Object.keys(cells).length) return;      // 全是「没打勾」且盘上本来就没有，不写
+      plan.merge.push({ key: DAY_PREFIX + day, cells: cells });
+    });
+    Object.keys(prevDaily).forEach(function (day) {
+      if (!nextDaily[day]) plan.del.push(DAY_PREFIX + day);
+    });
+    cache.daily = { byKey: nextDaily };
     COLLS.forEach(function (c) {
       var prev = cache.rec[c] || { byKey: {} };
       var next = {};
@@ -3488,7 +3565,8 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
         var dirty = !!idxDirty[c + '|' + id];
         if (!force && old && old.ref === item && !dirty) { next[id] = old; return; }
         var j = safeJson(item);
-        if (force || !old || old.json !== j) plan.rec.push([c + '|' + id, j]);
+        // dirty：盘上那一行是旧的（比如 id 是从键里补出来的），即使内存里的 JSON 没变也要重写
+        if (dirty || force || !old || old.json !== j) plan.rec.push([c + '|' + id, j]);
         next[id] = { ref: item, json: j };
       });
       Object.keys(prev.byKey).forEach(function (id) {
@@ -3501,7 +3579,8 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   }
 
   function planEmpty(plan) {
-    return !plan.rec.length && !plan.del.length && !plan.meta.length && !plan.mdel.length;
+    return !plan.rec.length && !plan.del.length && !plan.merge.length &&
+      !plan.meta.length && !plan.mdel.length;
   }
 
   function writeUiHint() {
@@ -3526,8 +3605,12 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
       store.db = db;
       store.backend = 'idb';
       return idbReadAll().then(function (all) {
-        if (all.meta.marker) { adoptMigrated(all); return null; }
-        return migrateLegacy(all);
+        if (!all.meta.marker) return migrateLegacy(all);
+        var mark = null;
+        try { mark = JSON.parse(all.meta.marker); } catch (e) { mark = null; }
+        if (mark && Number(mark.schema) < SCHEMA_MARK) return upgradeSchema(all);
+        adoptMigrated(all);
+        return null;
       });
     }, function () {
       store.backend = 'ls';
@@ -3596,6 +3679,35 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
       cache = null;
       storageFailed();
     }
+  }
+
+  // 0.7.x → 0.8.0：打卡从 meta 里拆出来，一天一行
+  // 全在一个事务里：拆完才删 meta.daily、才改 marker；中途失败就按旧布局继续跑
+  function upgradeSchema(all) {
+    var plan = { rec: [], del: [], merge: [], meta: [], mdel: [] };
+    var legacy = {};
+    try { legacy = JSON.parse(all.meta.daily || '{}') || {}; } catch (e) { legacy = {}; }
+    var have = {};
+    (all.recs || []).forEach(function (row) {
+      if (row.k.indexOf(DAY_PREFIX) === 0) have[row.k] = true;
+    });
+    Object.keys(legacy).forEach(function (day) {
+      var v = legacy[day];
+      if (!day || !v || typeof v !== 'object' || Array.isArray(v)) return;
+      if (have[DAY_PREFIX + day]) return;
+      plan.rec.push([DAY_PREFIX + day, safeJson(v)]);
+    });
+    plan.mdel.push('daily');
+    plan.meta.push(['marker', safeJson({ schema: SCHEMA_MARK, at: Date.now(), from: 'v0.7' })]);
+    return idbWrite(plan).then(function () {
+      return idbReadAll();
+    }).then(function (all2) {
+      adoptMigrated(all2);
+      return null;
+    }).catch(function () {
+      adoptMigrated(all);          // 升级没成功：旧布局照样能读，不丢记录
+      return null;
+    });
   }
 
   // 旧标签页可能还在往 localStorage 写；有就按 id 并进来，不丢
@@ -3711,7 +3823,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     return idbMetaPut('env', safeJson(env)).catch(function () { storageFailed(); });
   }
 
-  function save() {
+  function save(opts) {
     if (!storageOK) { storageFailed(); return; }
     if (!state) return;                              // 还没解锁：一个字节都不写
     uiHint.theme = state.settings.theme || 'auto';
@@ -3719,7 +3831,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     writeUiHint();
     if (store.backend !== 'idb') { saveLegacy(); return; }
     if (lock.on) { saveLocked(); return; }
-    saveRows();
+    saveRows(opts && opts.full);
   }
 
   // 兜底：整份 JSON 写 localStorage（0.6.x 的老路）
@@ -3760,9 +3872,9 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   }
 
   // 明文状态：只写变了的记录，一次一个事务
-  function saveRows() {
+  function saveRows(full) {
     if (!store.db) { storageFailed(); return; }
-    var plan = buildPlanRows(false);
+    var plan = buildPlanRows(!!full);
     if (planEmpty(plan)) return;
     saveChain = saveChain.then(function () {
       return idbWrite(plan).catch(function () { return idbWrite(plan); });
@@ -4614,6 +4726,19 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   }
 
   var lastWindowOpen = null;
+
+  // 跨过午夜：页面一直开着也要换成新的一天，别让昨天的对勾挂到今天
+  var daySeen = '';
+  function checkDayChange() {
+    var k = dayKey();
+    if (k === daySeen) return;
+    var first = !daySeen;
+    daySeen = k;
+    if (first || !booted) return;
+    renderToday();
+    renderReview();
+    renderRum();
+  }
 
   function updateWindowTimer() {
     var w = windowInfo();
@@ -6592,7 +6717,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     if (!pendingImport || pendingImport.blocked) return;
     if (!confirm('覆盖当前全部数据？建议先导出当前备份。')) return;
     state = normalize(pendingImport.data);
-    save();
+    save({ full: true });          // 整份替换：删掉的记录和打卡也要跟着消失
     applyTheme();
     clearCertFields();
     renderAll();
@@ -7254,6 +7379,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
   function bootApp() {
     if (booted) { renderAll(); hideSplash(); return; }
     booted = true;
+    daySeen = dayKey();
     applyTheme();
     initRanges();
     renderAll();
@@ -7268,7 +7394,7 @@ html[data-motion="reduce"] .boot__mark::after { animation: none; opacity: .45; }
     if (!storageOK) {
       setTimeout(function () { showToast('这个浏览器不能保存记录：关掉页面就会消失，先导出。'); }, 900);
     }
-    setInterval(updateWindowTimer, 1000);
+    setInterval(function () { updateWindowTimer(); checkDayChange(); }, 1000);
     startIdleWatch();
     hideSplash();
   }

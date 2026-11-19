@@ -183,19 +183,31 @@ JS_STATE = """async () => {
   got[2].forEach((k, i) => { meta[String(k)] = got[3][i]; });
   const head = JSON.parse(meta.state || '{}');
   const st = Object.assign({ v: 1, firstSeen: 0, daily: {}, sos: [], rum: [], cert: [], tr: [], sleep: [], parked: [] }, head);
-  st.daily = JSON.parse(meta.daily || '{}');
+  st.daily = {};
   got[0].forEach((k, i) => {
     const key = String(k);
     const p = key.indexOf('|');
     if (p < 0) return;
     const ns = key.slice(0, p);
-    if (!st[ns] || ns === 'daily') return;
-    st[ns].push(JSON.parse(got[1][i]));
+    const rest = key.slice(p + 1);
+    if (ns === 'daily') {
+      try { const d = JSON.parse(got[1][i]); if (d && typeof d === 'object') st.daily[rest] = d; } catch (e) {}
+      return;
+    }
+    if (!st[ns]) return;
+    try { st[ns].push(JSON.parse(got[1][i])); } catch (e) {}
   });
+  if (meta.daily) {
+    try {
+      const lg = JSON.parse(meta.daily);
+      Object.keys(lg).forEach((d) => { if (!st.daily[d]) st.daily[d] = lg[d]; });
+    } catch (e) {}
+  }
   st.__locked = !!meta.env;
   st.__marker = meta.marker ? JSON.parse(meta.marker) : null;
   st.__snapshot = meta['snapshot-v1'] || null;
   st.__keys = got[0].map(String);
+  st.__metaKeys = got[2].map(String);
   db.close();
   return st;
 }"""
@@ -220,8 +232,11 @@ JS_SEED = """async (state) => {
     safety: state.safety || null,
     settings: state.settings || null
   }), 'state');
-  ms.put(JSON.stringify(state.daily || {}), 'daily');
-  ms.put(JSON.stringify({ schema: 1, at: Date.now(), from: 'qa' }), 'marker');
+  Object.keys(state.daily || {}).forEach((d) => {
+    const v = state.daily[d];
+    if (v && typeof v === 'object') rs.put(JSON.stringify(v), 'daily|' + d);
+  });
+  ms.put(JSON.stringify({ schema: 2, at: Date.now(), from: 'qa' }), 'marker');
   await new Promise((res, rej) => {
     tx.oncomplete = () => res();
     tx.onerror = () => rej(tx.error);
@@ -3077,7 +3092,12 @@ def _store_marker(run):
         snap = json.loads(state["__snapshot"])
         assert len(snap["rum"]) == 2, "快照内容不对"
         keys = state["__keys"]
-        assert sorted(keys) == ["rum|mig-rum-1", "rum|mig-rum-2", "sos|mig-sos-1"], "记录键不对: %s" % keys
+        assert sorted(keys) == [
+            "daily|2026-11-01",
+            "rum|mig-rum-1",
+            "rum|mig-rum-2",
+            "sos|mig-sos-1",
+        ], "记录键不对: %s" % keys
         assert page.evaluate("() => !!localStorage.getItem('zhuolu.ui')"), "主题提示没写进 localStorage"
         return "旧键已删；快照留底；3 条记录 = 3 个键"
     finally:
@@ -3153,6 +3173,242 @@ def group_storage(run):
     run.check("0.7.0 存储", "没有 IndexedDB 时整份退回旧方式", lambda: _store_fallback(run), None)
 
 
+
+# ---------------------------------------------------------------- N 数据拓扑与调度链（0.8.0）
+
+JS_PUTROWS = """
+async (rows) => {
+""" + JS_IDB + """
+  const db = await qaOpen();
+  const tx = db.transaction(['rec'], 'readwrite');
+  const rs = tx.objectStore('rec');
+  (rows || []).forEach((r) => rs.put(r[1], r[0]));
+  await new Promise((res, rej) => {
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error || new Error('abort'));
+  });
+  db.close();
+  return true;
+}"""
+
+
+def base_state(**kw):
+    stamp = now_ms()
+    state = {
+        "v": 1,
+        "firstSeen": stamp - 86400000,
+        "sos": [], "rum": [], "cert": [], "tr": [], "sleep": [], "parked": [],
+        "daily": {},
+        "window": {"time": "19:30", "minutes": 15, "openedAt": 0, "closedDay": ""},
+        "safety": {"signals": [], "coping": [], "distract": [], "people": [],
+                   "pros": [], "env": [], "reasons": [], "updatedAt": 0},
+        "settings": {"theme": "auto", "motion": "auto", "support": ["", ""],
+                     "lastExportAt": 0, "nudgeSnoozeUntil": 0,
+                     "quickExit": "search", "quickExitUrl": ""},
+    }
+    state.update(kw)
+    return state
+
+
+def boot_wait(page, route="now"):
+    page.wait_for_selector("#boot-splash", state="detached", timeout=20000)
+    visible(page, ".view[data-view='%s'].is-active" % route)
+
+
+def reseed(page, state, route="now"):
+    page.evaluate("(r) => { if (location.hash !== '#/' + r) location.hash = '#/' + r; }", route)
+    page.wait_for_timeout(120)
+    seed_state(page, state)
+    page.reload(wait_until="domcontentloaded")
+    boot_wait(page, route)
+
+
+def rec_ids(page, panel="rec-tr"):
+    return page.eval_on_selector_all(
+        "#%s [data-action='del-record']" % panel,
+        "els => els.map(e => e.getAttribute('data-id'))",
+    )
+
+
+def _data_bad_rows(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("now")
+    try:
+        reseed(page, base_state(), "now")
+        page.evaluate(JS_PUTROWS, [
+            ("nopipe", '{"a":1}'),
+            ("tr|arr", "[]"),
+            ("tr|num", "5"),
+            ("tr|broken", "{"),
+            ("tr|nullv", "null"),
+            ("tr|ok", '{"id":"ok","t":1,"thought":"好的那条"}'),
+        ])
+        page.reload(wait_until="domcontentloaded")
+        boot_wait(page)
+        ids = rec_ids(page)
+        assert ids == ["ok"], "坏行不该变成记录，实际 %s" % ids
+        state = app_state(page)
+        assert "tr|ok" in state["__keys"], "好记录的行被删了"
+        objs = [x for x in state["tr"] if isinstance(x, dict)]
+        assert len(objs) == 1, "内存里也只剩一条，实际 %d" % len(objs)
+        return "6 条坏行（无分隔符 / 数组 / 数字 / 半截 JSON / null）全部跳过，好记录还在"
+    finally:
+        session.close()
+
+
+def _data_same_id(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("now")
+    try:
+        reseed(page, base_state(sos=[{"id": "dup", "t": 1000, "before": 6, "after": 3, "need": []}]), "now")
+        page.evaluate(JS_PUTROWS, [("tr|dup", '{"id":"dup","t":2000,"thought":"同 id 的另一条"}')])
+        page.reload(wait_until="domcontentloaded")
+        boot_wait(page)
+        state = app_state(page)
+        assert "sos|dup" in state["__keys"] and "tr|dup" in state["__keys"], "两个集合没各占一个键"
+        assert len(state["sos"]) == 1 and len(state["tr"]) == 1, "两个集合互相串了"
+        return "sos|dup 与 tr|dup 各占一键，互不覆盖"
+    finally:
+        session.close()
+
+
+def _data_dup_import(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("more")
+    try:
+        reseed(page, base_state(), "more")
+        payload = {
+            "app": "zhuolu",
+            "schemaVersion": 1,
+            "appVersion": "0.8.0",
+            "exportedAt": "2026-11-18T12:00:00",
+            "data": base_state(tr=[{"id": "same", "t": 1000, "thought": "甲"},
+                                   {"id": "same", "t": 2000, "thought": "乙"}]),
+        }
+        fixture = run.out_dir / "fixtures" / "dup-ids.json"
+        fixture.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        choose_import(page, fixture)
+        page.once("dialog", lambda d: d.accept())
+        page.click("[data-action='import-overwrite']")
+        page.wait_for_timeout(600)
+        ids = rec_ids(page)
+        assert ids == ["same"], "覆盖导入后内存里应只有一条，实际 %s" % ids
+        state = app_state(page)
+        assert [k for k in state["__keys"] if k.startswith("tr|")] == ["tr|same"], "盘上也应只有一行"
+        page.reload(wait_until="domcontentloaded")
+        boot_wait(page, "more")
+        assert rec_ids(page) == ["same"], "刷新后仍只有一条"
+        return "文件里两条同 id → 只留第一条，刷新后仍是 1 条"
+    finally:
+        session.close()
+
+
+def _data_two_tabs(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page_a = session.open("today")
+    try:
+        reseed(page_a, base_state(), "today")
+        page_b = session.context.new_page()
+        page_b.goto(run.index_url + "#/today", wait_until="domcontentloaded")
+        boot_wait(page_b, "today")
+        page_b.click("#today-checks .check-row[data-check='sleep']")
+        page_b.wait_for_timeout(400)
+        page_a.bring_to_front()
+        page_a.click("#today-checks .check-row[data-check='eat']")
+        page_a.wait_for_timeout(500)
+        page_a.reload(wait_until="domcontentloaded")
+        boot_wait(page_a, "today")
+        state = app_state(page_a)
+        day = state["daily"][today_key()]
+        assert day["sleep"] is True and day["eat"] is True, "两个标签页的打卡互相盖掉了：%s" % day
+        assert ("daily|" + today_key()) in state["__keys"], "打卡没有落成一天一行"
+        assert "daily" not in state["__metaKeys"], "打卡不该再写在 meta 里"
+        return "两个标签页各点一项，刷新后两项都在；打卡是一天一行"
+    finally:
+        session.close()
+
+
+def _data_midnight(run):
+    now = datetime.now()
+    target = now.replace(hour=23, minute=59, second=30, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    shift = int((target - now).total_seconds() * 1000)
+    k1 = target.strftime("%Y-%m-%d")
+    k2 = (target + timedelta(days=1)).strftime("%Y-%m-%d")
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    session.context.add_init_script("""
+      (() => {
+        const RealDate = Date;
+        window.__qaShiftMs = %d;
+        class FakeDate extends RealDate {
+          constructor(...a) {
+            if (a.length === 0) { super(RealDate.now() + window.__qaShiftMs); }
+            else { super(...a); }
+          }
+          static now() { return RealDate.now() + window.__qaShiftMs; }
+        }
+        window.Date = FakeDate;
+      })();
+    """ % shift)
+    page = session.open("today")
+    try:
+        page.click("#today-checks .check-row[data-check='sleep']")
+        page.wait_for_timeout(300)
+        page.evaluate("() => { window.__qaShiftMs += 120000; }")
+        page.click("#today-checks .check-row[data-check='eat']")
+        page.wait_for_timeout(300)
+        daily = app_state(page)["daily"]
+        assert daily[k1]["sleep"] is True, "跨天前的打卡归属错了：%s" % daily.get(k1)
+        assert daily[k2]["eat"] is True, "跨天后的打卡没写进新的一天：%s" % daily.get(k2)
+        assert not daily[k2].get("sleep"), "新的一天不该继承昨天的对勾"
+        return "%s 与 %s 各自归属正确" % (k1, k2)
+    finally:
+        session.close()
+
+
+def _data_rapid(run):
+    session = Session(run, viewport={"width": 1280, "height": 900})
+    page = session.open("today")
+    try:
+        reseed(page, base_state(), "today")
+        page.evaluate("""async () => {
+          const rows = Array.from(document.querySelectorAll('#today-checks .check-row'));
+          for (const r of rows) { r.click(); await new Promise((res) => setTimeout(res, 15)); }
+        }""")
+        page.wait_for_timeout(900)
+        day = app_state(page)["daily"][today_key()]
+        assert all(day.get(c) for c in ["sleep", "eat", "move", "connect", "push"]), "连点后有勾没落盘：%s" % day
+        page.evaluate("""async () => {
+          const r = document.querySelector('#today-checks .check-row[data-check="sleep"]');
+          for (let i = 0; i < 10; i++) { r.click(); await new Promise((res) => setTimeout(res, 8)); }
+        }""")
+        page.wait_for_timeout(900)
+        page.reload(wait_until="domcontentloaded")
+        boot_wait(page, "today")
+        day2 = app_state(page)["daily"][today_key()]
+        assert day2["sleep"] is True, "10 次连点（偶数）后应保持开"
+        page.click("#today-checks .check-row[data-check='sleep']")
+        page.wait_for_timeout(700)
+        page.reload(wait_until="domcontentloaded")
+        boot_wait(page, "today")
+        day3 = app_state(page)["daily"][today_key()]
+        assert day3["sleep"] is False, "再点一次后应关，实际 %s" % day3
+        return "15ms 连点 5 行、8ms 连点 10 次，落盘与点击次数一致"
+    finally:
+        session.close()
+
+
+def group_data(run):
+    run.check("数据拓扑", "坏行不拖垮启动", lambda: _data_bad_rows(run), None)
+    run.check("数据拓扑", "同 id 跨集合各占一键", lambda: _data_same_id(run), None)
+    run.check("数据拓扑", "导入文件里重复 id 只留一条", lambda: _data_dup_import(run), None)
+    run.check("数据拓扑", "两个标签页的打卡不互相覆盖", lambda: _data_two_tabs(run), None)
+    run.check("数据拓扑", "跨午夜打卡归属", lambda: _data_midnight(run), None)
+    run.check("数据拓扑", "连续点击不丢更新", lambda: _data_rapid(run), None)
+
+
 GROUPS = [
     ("加载与结构", group_smoke),
     ("SOS 着陆", group_sos),
@@ -3166,6 +3422,7 @@ GROUPS = [
     ("PWA / 离线", group_pwa),
     ("隐私与安全", group_privacy),
     ("0.7.0 存储", group_storage),
+    ("数据拓扑", group_data),
     ("记录与小结", group_records),
     ("全局汇总", group_global),
 ]
